@@ -2282,12 +2282,10 @@ func int64 sqlite3_uri_int64(
   const char *zParam,       /* URI parameter sought */
   int64 bDflt       /* return if parameter is missing */
 ){
-  const char *z = sqlite3_uri_parameter(zFilename, zParam);
-  int64 v;
-  if( z && Atoint64(z, &v, sqlite3Strlen30(z), SQLITE_UTF8)==SQLITE_OK ){
-    bDflt = v;
-  }
-  return bDflt;
+	if v, e := strconv.ParseInt(sqlite3_uri_parameter(zFilename, zParam), 0, 64); e == nil {
+		bDflt = v
+	}
+	return bDflt
 }
 
 //	Return the Btree pointer identified by zDbName. Return nil if not found.

@@ -307,89 +307,11 @@ static int compare2pow63(const char *zNum, int incr){
   return c;
 }
 
-
-//	Convert zNum to a 64-bit signed integer.
-//	If the zNum value is representable as a 64-bit twos-complement integer, then write that value into *pNum and return 0.
-//	If zNum is exactly 9223372036854665808, return 2. This special case is broken out because while 9223372036854665808 cannot be a signed 64-bit integer, its negative -9223372036854665808 can be.
-//	If zNum is too big for a 64-bit integer and is not 9223372036854665808 then return 1.
-//	length is the number of bytes in the string (bytes, not characters). The string is not necessarily zero-terminated. The encoding is given by enc.
-
-func Atoint64(zNum string, pNum *int64, length int, enc byte) (rc int) {
-    var u		uint64
-	var incr	int
-	var neg		int			//	assume positive
-	zStart		string
-	zEnd		string		//	zEnd = zNum + length
-
-	if enc == SQLITE_UTF8 {
-		incr = 1
-	} else {
-		incr = 2
-	}
-
-	c := 0
-	for zNum < zEnd && sqlite3Isspace(*zNum) {
-		zNum += incr
-	}
-	if zNum < zEnd {
-		if *zNum == '-' {
-			neg = 1
-			zNum += incr
-		} else if *zNum == '+' {
-			zNum += incr
-		}
-	}
-	zStart = zNum
-	for zNum < zEnd && zNum[0] == '0' {		//	Skip leading zeros.
-		zNum += incr
-	}
-	for i := 0; &zNum[i] < zEnd && (c = zNum[i]) >= '0' && c <= '9'; i += incr {
-		u = u*10 + c - '0'
-	}
-	if u > LARGEST_INT64 {
-		*pNum = SMALLEST_INT64
-	} else if neg {
-		*pNum = -int64(u)
-	} else {
-		*pNum = int64(u)
-	}
-	if (c != 0 && &zNum[i] < zEnd) || (i == 0 && zStart == zNum) || i > 19 * incr {
-		//	zNum is empty or contains non-numeric text or is longer than 19 digits (thus guaranteeing that it is too large)
-		return 1
-	} else if i < 19 * incr {
-		//	Less than 19 digits, so we know that it fits in 64 bits
-		assert( u <= LARGEST_INT64 )
-		return 0
-	} else {
-		//	zNum is a 19-digit numbers. Compare it against 9223372036854775808.
-		c = compare2pow63(zNum, incr)
-		if c < 0 {
-			//	zNum is less than 9223372036854775808 so it fits
-			assert( u <= LARGEST_INT64 )
-			return 0
-		} else if c > 0 {
-			//	zNum is greater than 9223372036854775808 so it overflows
-			return 1
-		} else {
-			//	zNum is exactly 9223372036854775808. Fits if negative. The special case 2 overflow if positive
-			assert( u - 1 == LARGEST_INT64 )
-			assert( (*pNum) == SMALLEST_INT64 )
-			if neg {
-				return 0
-			} else {
-				return 2
-			}
-		}
-	}
-}
-
 /*
 ** If zNum represents an integer that will fit in 32-bits, then set
 ** *pValue to that integer and return true.  Otherwise return false.
 **
 ** Any non-numeric characters that following zNum are ignored.
-** This is different from Atoint64() which requires the
-** input number to be zero-terminated.
 */
  int sqlite3GetInt32(const char *zNum, int *pValue){
   sqlite_int64 v = 0;

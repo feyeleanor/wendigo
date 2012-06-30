@@ -3119,7 +3119,6 @@ func int sqlite3_bind_parameter_index(sqlite3_stmt*, const char *Name);
 ** the [BindBlob | bindings] on a [prepared statement].
 ** ^Use this routine to reset all host parameters to NULL.
 */
-func int sqlite3_clear_bindings(sqlite3_stmt*);
 
 /*
 ** CAPI3REF: Number Of Columns In A Result Set
@@ -3527,7 +3526,7 @@ func int sqlite3_finalize(sqlite3_stmt *pStmt);
 ** object back to its initial state, ready to be re-executed.
 ** ^Any SQL statement variables that had values bound to them using
 ** the [BindBlob | sqlite3_bind_*() API] retain their values.
-** Use [sqlite3_clear_bindings()] to reset the bindings.
+** Use [ClearBindings()] to reset the bindings.
 **
 ** ^The [sqlite3_reset(S)] interface resets the [prepared statement] S
 ** back to the beginning of its program.

@@ -536,7 +536,7 @@ const JOURNAL_MODES = []string{ "delete", "persist", "off", "truncate", "memory"
     Pager *pPager = pDb.pBt.Pager()
     int64 iLimit = -2;
     if( zRight ){
-      Atoint64(zRight, &iLimit, 1000000, SQLITE_UTF8);
+      iLimit, _ = strconv.ParseInt(zRight, 0, 64)
       if( iLimit<-1 ) iLimit = -1;
     }
     iLimit = sqlite3PagerJournalSizeLimit(pPager, iLimit);

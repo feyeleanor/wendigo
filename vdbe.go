@@ -152,13 +152,15 @@ static VdbeCursor *allocateCursor(
 static void applyNumericAffinity(Mem *pRec){
   if( (pRec.flags & (MEM_Real|))==0 ){
     double rValue;
-    int64 Value;
     byte enc = pRec.enc;
-    if( (pRec.flags&MEM_Str)==0 ) return;
-    if( sqlite3AtoF(pRec.z, &rValue, pRec.n, enc)==0 ) return;
-    if Atoint64(pRec.z, &Value, pRec.n, enc) == 0 {
-      pRec.Store(Value)
-      pRec.flags |= ;
+    if pRec.flags & MEM_Str == 0 {
+		return
+	}
+    if sqlite3AtoF(pRec.z, &rValue, pRec.n, enc) == 0 {
+		return
+	}
+    if v, e := strconv.ParseInt(pRec.z, 0, 64); e == nil {
+      pRec.Store(v)
     }else{
       pRec.r = rValue;
       pRec.flags |= MEM_Real;
@@ -1042,7 +1044,7 @@ case OP_Null:				//	out2-prerelease
 		pOut++
 		memAboutToChange(p, pOut)
 		VdbeMemRelease(pOut)
-		pOut.flags = MEM_Null
+		pOut.Value = nil
 		u.ab.cnt--
 	}
 
@@ -1215,7 +1217,7 @@ case OP_Concat:					//	same as TK_CONCAT, in1, in2, out3
 	pIn2 = &aMem[pOp.p2]
 	pOut = &aMem[pOp.p3]
 	assert( pIn1 != pOut )
-	if (pIn1.flags | pIn2.flags) & MEM_Null == 0 {
+	if pIn1.Value != nil && pIn2.Value != nil {					//	(pIn1.flags | pIn2.flags) & MEM_Null == 0 {
 		if ExpandBlob(pIn1) || ExpandBlob(pIn2) {
 			goto no_mem
 		}
@@ -1453,7 +1455,7 @@ case OP_ShiftRight:						//	same as TK_RSHIFT, in1, in2, out3
 	pIn1 = &aMem[pOp.p1]
 	pIn2 = &aMem[pOp.p2]
 	pOut = &aMem[pOp.p3]
-	if (pIn1.flags | pIn2.flags) & MEM_Null == 0 {
+	if pIn1.Value != nil && pIn2.Value != nil {				//	(pIn1.flags | pIn2.flags) & MEM_Null == 0 {
 		u.ai.iA = sqlite3VdbeIntValue(pIn2)
 		u.ai.iB = sqlite3VdbeIntValue(pIn1)
 		u.ai.op = pOp.opcode
@@ -1624,12 +1626,12 @@ case OP_Ge:						//	same as TK_GE, jump, in1, in3
 	pIn3 = &aMem[pOp.p3]
 	u.aj.flags1 = pIn1.flags
 	u.aj.flags3 = pIn3.flags
-	if (u.aj.flags1 | u.aj.flags3) & MEM_Null {
+	if pIn1.Value == nil || pIn3.Value == nil {
 		//	One or both operands are NULL
 		if pOp.p5 & SQLITE_NULLEQ {
 			//	If SQLITE_NULLEQ is set (which will only happen if the operator is OP_Eq or OP_Ne) then take the jump or not depending on whether or not both operands are null.
 			assert( pOp.opcode == OP_Eq || pOp.opcode == OP_Ne )
-			u.aj.res = (u.aj.flags1 & u.aj.flags3 & MEM_Null) == 0
+			u.aj.res = pIn1.Value != nil || pIn3.Value != nil					//     (u.aj.flags1 & u.aj.flags3 & MEM_Null) == 0
 		} else {
 			//	SQLITE_NULLEQ is clear and at least one operand is NULL, then the result is always NULL. The jump is taken if the SQLITE_JUMPIFNULL bit is set.
 			switch {

@@ -77,24 +77,19 @@ func int sqlite3_reset(sqlite3_stmt *pStmt){
   return rc;
 }
 
-/*
-** Set all the parameters in the compiled SQL statement to NULL.
-*/
-func int sqlite3_clear_bindings(sqlite3_stmt *pStmt){
-  int i;
-  int rc = SQLITE_OK;
-  Vdbe *p = (Vdbe*)pStmt;
-  sqlite3_mutex *mutex = ((Vdbe*)pStmt).db.mutex;
-  mutex.Lock()
-  for(i=0; i<p.nVar; i++){
-    p.aVar[i].Release()
-    p.aVar[i].flags = MEM_Null;
-  }
-  if( p.isPrepareV2 && p.expmask ){
-    p.expired = 1;
-  }
-  mutex.Unlock()
-  return rc;
+//	Set all the parameters in the compiled SQL statement to NULL.
+func (pStmt *sqlite3_stmt) ClearBindings() (rc int) {
+	p := (Vdbe*)(pStmt)
+	p.db.mutex.CriticalSection(func() {
+		for _, v := range p.aVar {
+			v.Release()
+			v.Value = nil
+		}
+		if p.isPrepareV2 && p.expmask {
+			p.expired = 1
+		}
+	})
+	return
 }
 
 
@@ -455,7 +450,7 @@ func void *sqlite3_aggregate_context(sqlite3_context *p, int nByte){
   if( (pMem.flags & MEM_Agg)==0 ){
     if( nByte<=0 ){
       pMem.ReleaseExternal()
-      pMem.flags = MEM_Null;
+      pMem.Value = nil
       pMem.z = 0;
     }else{
       sqlite3VdbeMemGrow(pMem, nByte, 0);
@@ -557,7 +552,7 @@ func (pStmt *sqlite3_stmt) ColumnMem(i int) (pOut *Mem) {
 			pVm.db.mutex.Lock()
 			pVm.db.Error(SQLITE_RANGE, "")
 		}
-		pOut = new(Mem)				//	 0, "", (double)0, {0}, 0, MEM_Null, SQLITE_NULL, 0, 0, 0 };
+		pOut = new(Mem)
 	}
 	return
 }

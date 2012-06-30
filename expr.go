@@ -420,15 +420,15 @@ void sqlite3ExprAssignVarNumber(Parse *pParse, Expr *pExpr){
     if( z[0]=='?' ){
       /* Wildcard of the form "?nnn".  Convert "nnn" to an integer and
       ** use it as the variable number */
-      int64 i;
-      int bOk = Atoint64(&z[1], &i, n-1, SQLITE_UTF8) == 0
-      pExpr.iColumn = x = (ynVar)i;
-      if( bOk==0 || i<1 ){
+	  i, e := strconv.ParseInt(z[1:], 0, 10)
+	  x = ynVar(i)
+      pExpr.iColumn = x
+      if e == nil || i < 1 {
         pParse.SetErrorMsg("variable number must be ?1 or greater")
         x = 0;
       }
-      if( i>pParse.nVar ){
-        pParse.nVar = (int)i;
+      if i > pParse.nVar {
+        pParse.nVar = int(i)
       }
     }else{
       /* Wildcards like ":aaa", "$aaa" or "@aaa".  Reuse the same variable
@@ -1316,33 +1316,31 @@ static void codeReal(Vdbe *v, const char *z, int negateFlag, int iMem){
 
 
 /*
-** Generate an instruction that will put the integer describe by
-** text z[0..n-1] into register iMem.
+** Generate an instruction that will put the integer described by text z[0..n-1] into register iMem.
 **
 ** Expr.Token is always UTF8 and zero-terminated.
 */
 static void codeInteger(Parse *pParse, Expr *pExpr, int negFlag, int iMem){
-  Vdbe *v = pParse.pVdbe;
-  if( pExpr.flags & EP_IntValue ){
-    int i = pExpr.Value;
-    assert( i>=0 );
-    if( negFlag ) i = -i;
-    v.AddOp2(OP_Integer, i, iMem);
-  }else{
-    int c;
-    int64 value;
-    const char *z = pExpr.Token;
-    assert( z!=0 );
-    c = Atoint64(z, &value, sqlite3Strlen30(z), SQLITE_UTF8);
-    if( c==0 || (c==2 && negFlag) ){
-      char *zV;
-      if( negFlag ){ value = c==2 ? SMALLEST_INT64 : -value; }
-      zV = dup8bytes(v, (char*)&value);
-      sqlite3VdbeAddOp4(v, OP_Int64, 0, iMem, 0, zV, P4_INT64);
-    }else{
-      codeReal(v, z, negFlag, iMem);
-    }
-  }
+	v := pParse.pVdbe
+	if pExpr.flags & EP_IntValue {
+		i := pExpr.Value
+		assert( i >= 0 )
+		if negFlag {
+			i = -i
+		}
+		v.AddOp2(OP_Integer, i, iMem)
+	} else {
+		z := pExpr.Token
+		assert( z != "" )
+		if value, e := strconv.ParseInt(z, 0, 64); e == nil {
+			if negFlag {
+				value = -value
+			}
+			sqlite3VdbeAddOp4(v, OP_Int64, 0, iMem, 0, dup8bytes(v, (char*)&value), P4_INT64)
+		} else {
+			codeReal(v, z, negFlag, iMem)
+		}
+	}
 }
 
 /*

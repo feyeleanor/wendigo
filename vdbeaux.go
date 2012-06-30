@@ -541,7 +541,7 @@ static char *displayP4(Op *pOp, char *zTemp, int nTemp){
 			zTemp = fmt.Sprintf("%lld", v)
 		case pMem.flags & MEM_Real != 0:
 			zTemp = fmt.Sprintf("%.16g", pMem.r)
-		case pMem.flags & MEM_Null != 0:
+		case pMem.Value == nil:
 			zTemp = "NULL"
 		default:
 			assert( pMem.flags & MEM_Blob != 0 )
@@ -796,7 +796,7 @@ func (p *Vdbe) List() (rc int) {
 			pMem.Type = SQLITE_TEXT
 			pMem.enc = SQLITE_UTF8
 			pMem++
-			pMem.flags = MEM_Null					//	Comment
+			pMem.Value = nil					//	Comment
 			pMem.Type = SQLITE_NULL
 		}
 		p.nResColumn = 8 - 4*(p.explain-1)
@@ -1008,7 +1008,7 @@ func (p *Vdbe) Rewind() {
   if( p.aVar ){
     p.nVar = (ynVar)nVar;
     for(n=0; n<nVar; n++){
-      p.aVar[n].flags = MEM_Null;
+      p.aVar[n].Value = nil
       p.aVar[n].db = db;
     }
   }
@@ -1123,7 +1123,7 @@ static void Cleanup(Vdbe *p){
   p.ColumnsName = pColName = (Mem*)sqlite3DbMallocZero(db, sizeof(Mem)*n );
   if( p.ColumnsName==0 ) return;
   while( n-- > 0 ){
-    pColName.flags = MEM_Null;
+    pColName.Value = nil
     pColName.db = p.db;
     pColName++;
   }
@@ -1750,7 +1750,7 @@ var MAX_6BYTE int64 = (0x00008000 << 32) - 1
 
 //	Return the serial-type for the value stored in pMem.
 func (pMem *Mem) VdbeSerialType(file_format int) (count uint32) {
-	if flags := pMem.flags; flags & MEM_Null == 0 {
+	if flags := pMem.flags; pMem.Value != nil {
 		switch pMem.Value.(type) {
 		case int64:
 			//	Figure out whether to use 1, 2, 4, 6 or 8 bytes.
@@ -1856,7 +1856,7 @@ func (pMem *Mem) VdbeSerialGet(buf []byte, serial_type uint32) (count uint32) {
 	case 10:					//	Reserved for future use
 	case 11:					//	Reserved for future use
 	case 0:						//	NULL
-		pMem.flags = MEM_Null
+		pMem.Value = nil
 	case 1:						//	1-byte signed integer
 		pMem.Store(int64(buf[0]))
 		count = 1
@@ -1884,8 +1884,11 @@ func (pMem *Mem) VdbeSerialGet(buf []byte, serial_type uint32) (count uint32) {
 	case 7:						//	IEEE floating point
 		x := int64(buf[0]) << 24 | int64(buf[1]) << 16 | int64(buf[2]) << 8 | int64(buf[3])
 		y := int64(buf[4]) << 24 | int64(buf[5]) << 16 | int64(buf[6]) << 8 | int64(buf[7])
-		pMem.r = math.Float64frombits(x << 32 | y)
-		pMem.flags = math.IsNaN(pMem.r) ? MEM_Null : MEM_Real
+		if pMem.r = math.Float64frombits(x << 32 | y); math.IsNaN(pMem.r) {
+			pMem.Value = nil
+		} else {
+			pMem.flags = MEM_Real
+		}
 		count = 8
     case 8:		fallthrough		//	Integer 0
     case 9:						//	Integer 1
@@ -2230,12 +2233,11 @@ func (v *Vdbe) DB() *sqlite3 {
   assert( iVar>0 );
   if( v ){
     Mem *pMem = &v.aVar[iVar-1];
-    if( 0==(pMem.flags & MEM_Null) ){
+    if pMem.Value != nil {
       sqlite3_value *pRet = v.db.NewValue()
       if( pRet ){
         sqlite3VdbeMemCopy((Mem *)pRet, pMem);
         sqlite3ValueApplyAffinity(pRet, aff, SQLITE_UTF8);
-        (Mem *)(pRet).StoreType()
       }
       return pRet;
     }

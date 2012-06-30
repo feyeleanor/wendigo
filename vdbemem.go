@@ -42,43 +42,43 @@ int sqlite3VdbeChangeEncoding(Mem *pMem, int desiredEnc){
 */
  int sqlite3VdbeMemGrow(Mem *pMem, int n, int preserve){
   assert( 1 >=
-    ((pMem.zMalloc && pMem.zMalloc==pMem.z) ? 1 : 0) +
-    (((pMem.flags&MEM_Dyn)&&pMem.xDel) ? 1 : 0) + 
-    ((pMem.flags&MEM_Ephem) ? 1 : 0) + 
-    ((pMem.flags&MEM_Static) ? 1 : 0)
+    ((pMem.zMalloc && pMem.zMalloc == pMem.z) ? 1 : 0) +
+    (((pMem.flags & MEM_Dyn) && pMem.xDel) ? 1 : 0) + 
+    ((pMem.flags & MEM_Ephem) ? 1 : 0) + 
+    ((pMem.flags & MEM_Static) ? 1 : 0)
   );
-  assert( (pMem.flags&MEM_RowSet)==0 );
+  assert( (pMem.flags & MEM_RowSet) == 0 )
 
   /* If the preserve flag is set to true, then the memory cell must already
   ** contain a valid string or blob value.  */
-  assert( preserve==0 || pMem.flags&(MEM_Blob|MEM_Str) );
+  assert( preserve == 0 || pMem.flags & (MEM_Blob | MEM_Str) )
 
   if( n<32 ) n = 32;
   if( sqlite3DbMallocSize(pMem.db, pMem.zMalloc)<n ){
     if( preserve && pMem.z==pMem.zMalloc ){
-      pMem.z = pMem.zMalloc = sqlite3DbReallocOrFree(pMem.db, pMem.z, n);
-      preserve = 0;
+      pMem.z = pMem.zMalloc = sqlite3DbReallocOrFree(pMem.db, pMem.z, n)
+      preserve = 0
     }else{
-      pMem.zMalloc = sqlite3DbMallocRaw(pMem.db, n);
+      pMem.zMalloc = sqlite3DbMallocRaw(pMem.db, n)
     }
   }
 
   if( pMem.z && preserve && pMem.zMalloc && pMem.z!=pMem.zMalloc ){
-    memcpy(pMem.zMalloc, pMem.z, pMem.n);
+    memcpy(pMem.zMalloc, pMem.z, pMem.n)
   }
   if( pMem.flags&MEM_Dyn && pMem.xDel ){
-    assert( pMem.xDel!=SQLITE_DYNAMIC );
-    pMem.xDel((void *)(pMem.z));
+    assert( pMem.xDel != SQLITE_DYNAMIC )
+    pMem.xDel((void *)(pMem.z))
   }
 
-  pMem.z = pMem.zMalloc;
+  pMem.z = pMem.zMalloc
   if( pMem.z==0 ){
-    pMem.flags = MEM_Null;
+    pMem.Value = nil
   }else{
-    pMem.flags &= ~(MEM_Ephem|MEM_Static);
+    pMem.flags &= ~(MEM_Ephem | MEM_Static)
   }
   pMem.xDel = 0;
-  return (pMem.z ? SQLITE_OK : SQLITE_NOMEM);
+  return (pMem.z ? SQLITE_OK : SQLITE_NOMEM)
 }
 
 /*
@@ -125,7 +125,7 @@ int sqlite3VdbeChangeEncoding(Mem *pMem, int desiredEnc){
 
 //	Add MEM_Str to the set of representations for the given Mem. Converting a BLOB to a string is a no-op.
 //	Existing representations MEM_Int and MEM_Real are *not* invalidated.
-//	A MEM_Null value will never be passed to this function. This function is used for converting values to text for returning to the user (i.e. via Mem_text()), or for ensuring that values to be used as btree keys are strings. In the former case a NULL pointer is returned the user and the later is an internal programming error.
+//	A nil value will never be passed to this function. This function is used for converting values to text for returning to the user (i.e. via Mem_text()), or for ensuring that values to be used as btree keys are strings. In the former case a NULL pointer is returned the user and the later is an internal programming error.
 func (pMem *Mem) Stringify(enc int) (rc int) {
 	fg := pMem.flags
 	nByte := 32
@@ -155,7 +155,7 @@ func (pMem *Mem) Stringify(enc int) (rc int) {
 //	Return SQLITE_ERROR if the finalizer reports an error. SQLITE_OK otherwise.
 func (pMem *Mem) Finalize(pFunc *FuncDef) (rc int) {
 	if pFunc != nil && pFunc.xFinalize != nil {
-		assert( (pMem.flags & MEM_Null) != 0 || pFunc == pMem.u.pDef )
+		assert( pMem.Value == nil || pFunc == pMem.u.pDef )
 		ctx := &sqlite3_context{
 			s.flags:	MEM_Null,
 			s.db:		pMem.db,
@@ -245,7 +245,7 @@ static int64 doubleToInt64(double r){
 **
 ** If pMem represents a string value, its encoding might be changed.
 */
- int64 sqlite3VdbeIntValue(Mem *pMem){
+int64 sqlite3VdbeIntValue(Mem *pMem){
   int flags;
   assert( EIGHT_BYTE_ALIGNMENT(pMem) );
   flags = pMem.flags;
@@ -256,7 +256,7 @@ static int64 doubleToInt64(double r){
   }else if( flags & (MEM_Str|MEM_Blob) ){
     int64 value = 0;
     assert( pMem.z || pMem.n==0 );
-    Atoint64(pMem.z, &value, pMem.n, pMem.enc);
+    value, _ = strconv.ParseInt(pMem.z, 0, 64)
     return value;
   }else{
     return 0;
@@ -307,7 +307,6 @@ func (pMem *Mem) Integerify() (rc int) {
 	assert( EIGHT_BYTE_ALIGNMENT(pMem) )
 
 	pMem.Store(sqlite3VdbeIntValue(pMem))
-	pMem.SetTypeFlag(MEM_Int)
 	return
 }
 
@@ -322,17 +321,18 @@ func (pMem *Mem) Realify() (rc int) {
 //	Convert pMem so that it has types MEM_Real or MEM_Int or both. Invalidate any prior representations.
 //	Every effort is made to force the conversion, even if the input is a string that does not look completely like a number. Convert as much of the string as we can and ignore the rest.
 func (pMem *Mem) Numerify() (rc int) {
-	if pMem.flags & (MEM_Int | MEM_Real | MEM_Null) == 0 {
+	if pMem.Value == nil || pMem.flags & (MEM_Int | MEM_Real) == 0 {
 		assert( pMem.flags & (MEM_Blob | MEM_Str) != 0 )
-		if Atoint64(pMem.z, &pMem.Value, pMem.n, pMem.enc) == 0 {
-			pMem.SetTypeFlag(MEM_Int)
+
+		if i, e := strconv.ParseInt(pMem.z, 0, 64); e == nil {
+			pMem.Value = i
 		} else {
 			pMem.r = sqlite3VdbeRealValue(pMem)
 			pMem.SetTypeFlag(MEM_Real)
 			pMem.IntegerAffinity()
 		}
 	}
-	assert( pMem.flags & (MEM_Real | MEM_Null) != 0 )
+	assert( pMem.Value == nil || pMem.flags & MEM_Real != 0 )
 	pMem.flags &= ~(MEM_Str | MEM_Blob)
 	return
 }
@@ -396,7 +396,7 @@ func (pMem *Mem) SetInt64(val int64) {
   pMem.Release()
   pMem.zMalloc = sqlite3DbMallocRaw(db, 64);
   if( db.mallocFailed ){
-    pMem.flags = MEM_Null;
+    pMem.Value = nil
   }else{
     assert( pMem.zMalloc );
     pMem.u.pRowSet = sqlite3RowSetInit(db, pMem.zMalloc, 
@@ -472,7 +472,7 @@ func (p *Mem) VdbeMemTooBig() (ok bool) {
 
   pTo.Release()
   memcpy(pTo, pFrom, sizeof(Mem));
-  pFrom.flags = MEM_Null;
+  pFrom.Value = nil
   pFrom.xDel = 0;
   pFrom.zMalloc = 0;
 }
@@ -701,7 +701,7 @@ int sqlite3MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
 
   assert( (pVal.flags & MEM_RowSet)==0 );
 
-  if( pVal.flags&MEM_Null ){
+  if pVal.Value == nil {
     return 0;
   }
   assert( (MEM_Blob>>3) == MEM_Str );

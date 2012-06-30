@@ -369,7 +369,6 @@ static const sqlite3_api_routines sqlite3Apis = {
   ** Added after 3.3.13
   */
   sqlite3_prepare_v2,
-  sqlite3_clear_bindings,
 
   /*
   ** Added for 3.5.0
