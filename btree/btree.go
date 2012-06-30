@@ -22,7 +22,7 @@ static BtShared *sqlite3SharedCacheList = 0;
 
 //	Enable or disable the shared pager and schema features.
 //	This routine has no effect on existing database connections.
-//	The shared cache setting effects only future calls to sqlite3_open(), sqlite3_open16(), or sqlite3_open_v2().
+//	The shared cache setting effects only future calls to sqlite3_open() or sqlite3_open_v2().
 func EnableSharedCache() {
   sqlite3GlobalConfig.sharedCacheEnabled = true
 }

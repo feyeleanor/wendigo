@@ -787,8 +787,7 @@ static void importVtabErrMsg(Vdbe *p, sqlite3_vtab *pVtab){
   assert( p.magic==VDBE_MAGIC_RUN );  /* sqlite3_step() verifies this */
   p.Enter()
   if( p.rc==SQLITE_NOMEM ){
-    /* This happens if a malloc() inside a call to sqlite3_column_text() or
-    ** sqlite3_column_text16() failed.  */
+    /* This happens if a malloc() inside a call to sqlite3_column_text() failed.  */
     goto no_mem;
   }
   assert( p.rc==SQLITE_OK || p.rc==SQLITE_BUSY );
@@ -1018,29 +1017,6 @@ case OP_String8:					//	same as TK_STRING, out2-prerelease
 	assert( pOp.p4.z != "" )
 	pOp.opcode = OP_String
 	pOp.p1 = len(pOp.p4.z)
-
-#ifndef SQLITE_OMIT_UTF16
-	if encoding != SQLITE_UTF8 {
-		rc = pOut.SetStr(pOp.p4.z, SQLITE_UTF8, SQLITE_STATIC)
-		if rc == SQLITE_TOOBIG {
-			goto too_big
-		}
-		if sqlite3VdbeChangeEncoding(pOut, encoding) != SQLITE_OK {
-			goto no_mem
-		}
-		assert( pOut.zMalloc == pOut.z )
-		assert( pOut.flags & MEM_Dyn )
-		pOut.zMalloc = nil
-		pOut.flags |= MEM_Static
-		pOut.flags &= ~MEM_Dyn
-		if pOp.p4type == P4_DYNAMIC {
-			pOp.p4.z = ""
-		}
-		pOp.p4type = P4_DYNAMIC
-		pOp.p4.z = pOut.z
-		pOp.p1 = pOut.n
-	}
-#endif
 	if pOp.p1 < 0 {
 		goto too_big
 	}

@@ -376,9 +376,6 @@ static int isLikeOrGlob(
   if( !sqlite3IsLikeFunction(db, pExpr, pnoCase, wc) ){
     return 0;
   }
-#ifdef SQLITE_EBCDIC
-  if( *pnoCase ) return 0;
-#endif
   pList = pExpr.pList;
   pLeft = pList.a[1].Expr;
   if( pLeft.op!=TK_COLUMN 
@@ -2094,20 +2091,6 @@ static int whereKeyStats(
         int eSampletype = aSample[i].eType;
         if( eSampletype<eType ) continue;
         if( eSampletype!=eType ) break;
-#ifndef SQLITE_OMIT_UTF16
-        if( pColl.enc!=SQLITE_UTF8 ){
-          int nSample;
-          char *zSample = sqlite3Utf8to16(
-              db, pColl.enc, aSample[i].u.z, aSample[i].nByte, &nSample
-          );
-          if( !zSample ){
-            assert( db.mallocFailed );
-            return SQLITE_NOMEM;
-          }
-          c = pColl.xCmp(pColl.pUser, nSample, zSample, n, z);
-          zSample = nil
-        }else
-#endif
         {
           c = pColl.xCmp(pColl.pUser, aSample[i].nByte, aSample[i].u.z, n, z);
         }
@@ -2276,7 +2259,7 @@ static int whereRangeScanEst(
 
 //	Estimate the number of rows that will be returned based on an equality constraint x=VALUE and where that VALUE occurs in the histogram data. This only works when x is the left-most column of an index and sqlite_stat3 histogram data is available for that index. When pExpr == NULL that means the constraint is "x IS NULL" instead of "x=VALUE".
 //	Write the estimated row count into *pnRow and return SQLITE_OK. If unable to make an estimate, leave *pnRow unchanged and return non-zero.
-//	This routine can fail if it is unable to load a collating sequence required for string comparison, or if unable to allocate memory for a UTF conversion required for comparison. The error is stored in the pParse structure.
+//	This routine can fail if it is unable to load a collating sequence required for string comparison. The error is stored in the pParse structure.
 func (pParse *Parse) whereEqualScanEst(index *Index, expression *Expr) (rows float32, rc int) {
 	RHS		*sqlite3_value		//	VALUE on right-hand side of pTerm
 	defer func() {
@@ -2313,8 +2296,7 @@ func (pParse *Parse) whereEqualScanEst(index *Index, expression *Expr) (rows flo
 ** non-zero.
 **
 ** This routine can fail if it is unable to load a collating sequence
-** required for string comparison, or if unable to allocate memory
-** for a UTF conversion required for comparison.  The error is stored
+** required for string comparison. The error is stored
 ** in the pParse structure.
 */
 func (pParse *Parse) whereInScanEst(index *Index, expressions *ExprList) (rows float64, rc int) {

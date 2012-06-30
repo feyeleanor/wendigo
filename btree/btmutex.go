@@ -52,7 +52,7 @@
 //		  44       4     File format of schema layer
 //		  48       4     Size of page cache
 //		  52       4     Largest root-page (auto/incr_vacuum)
-//		  56       4     1=UTF-8 2=UTF16le 3=UTF16be
+//		  56       4     1=UTF-8
 //		  60       4     User version
 //		  64       4     Incremental vacuum mode
 //		  68       4     unused

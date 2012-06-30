@@ -453,18 +453,8 @@ struct compareInfo {
   byte noCase;
 };
 
-/*
-** For LIKE and GLOB matching on EBCDIC machines, assume that every
-** character is exactly one byte in size.  Also, all characters are
-** able to participate in upper-case-to-lower-case mappings in EBCDIC
-** whereas only characters less than 0x80 do in ASCII.
-*/
-#if defined(SQLITE_EBCDIC)
-# define sqlite3Utf8Read(A,C)  (*(A++))
-# define GlogUpperToLower(A)   A = sqlite3UpperToLower[A]
-#else
+
 # define GlogUpperToLower(A)   if( !((A)&~0x7f) ){ A = sqlite3UpperToLower[A]; }
-#endif
 
 static const struct compareInfo globInfo = { '*', '?', '[', 0 };
 /* The correct SQL-92 behavior is for the LIKE operator to ignore
@@ -651,9 +641,8 @@ static void likeFunc(
     */
     const unsigned char *zEsc = sqlite3_value_text(argv[2]);
     if( zEsc==0 ) return;
-    if( sqlite3Utf8CharLen((char*)zEsc, -1)!=1 ){
-      sqlite3_result_error(context, 
-          "ESCAPE expression must be a single character", -1);
+    if len(zEsc) != 1 {
+      sqlite3_result_error(context, "ESCAPE expression must be a single character", -1);
       return;
     }
     escape = sqlite3Utf8Read(zEsc, &zEsc);

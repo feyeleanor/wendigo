@@ -1364,7 +1364,7 @@ static char *createTableStmt(sqlite3 *db, Table *p){
 			if( pCons.z==0 ){
 				pCons = pEnd
 			}
-			nName := (int)((const char *)pCons.z - Name);
+			nName := int((const char *)pCons.z - Name)
 			p.addColOffset = 13 + sqlite3Utf8CharLen(Name, nName);
 		}
 #endif

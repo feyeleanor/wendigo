@@ -145,8 +145,6 @@ func CaseInsensitiveMatchN(left, right string, n int) (ok bool) {
 
   *pResult = 0.0;   /* Default return value, in case of an error */
 
-  if( enc==SQLITE_UTF16BE ) z++;
-
   /* skip leading spaces */
   while( z<zEnd && sqlite3Isspace(*z) ) z+=incr;
   if( z>=zEnd ) return 0;
@@ -317,7 +315,6 @@ static int compare2pow63(const char *zNum, int incr){
 //	length is the number of bytes in the string (bytes, not characters). The string is not necessarily zero-terminated. The encoding is given by enc.
 
 func Atoint64(zNum string, pNum *int64, length int, enc byte) (rc int) {
-int sqlite3Atoint64(const char *zNum, int64 *pNum, int length, byte enc){
     var u		uint64
 	var incr	int
 	var neg		int			//	assume positive
@@ -331,9 +328,6 @@ int sqlite3Atoint64(const char *zNum, int64 *pNum, int length, byte enc){
 	}
 
 	c := 0
-	if enc == SQLITE_UTF16BE {
-		zNum++
-	}
 	for zNum < zEnd && sqlite3Isspace(*zNum) {
 		zNum += incr
 	}
@@ -858,12 +852,7 @@ func Put4Byte(p []byte, v uint32) {
 */
  byte sqlite3HexToInt(int h){
   assert( (h>='0' && h<='9') ||  (h>='a' && h<='f') ||  (h>='A' && h<='F') );
-#ifdef SQLITE_ASCII
   h += 9*(1&(h>>6));
-#endif
-#ifdef SQLITE_EBCDIC
-  h += 9*(1&~(h>>4));
-#endif
   return (byte)(h & 0xf);
 }
 

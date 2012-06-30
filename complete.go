@@ -143,9 +143,6 @@ func int sqlite3_complete(const char *zSql){
         break;
       }
       default: {
-#ifdef SQLITE_EBCDIC
-        unsigned char c;
-#endif
         if( IdChar((byte)*zSql) ){
           /* Keywords and unquoted identifiers */
           int nId;
@@ -203,28 +200,4 @@ func int sqlite3_complete(const char *zSql){
   }
   return state==1;
 }
-
-#ifndef SQLITE_OMIT_UTF16
-/*
-** This routine is the same as the sqlite3_complete() routine described
-** above, except that the parameter is required to be UTF-16 encoded, not
-** UTF-8.
-*/
-func int sqlite3_complete16(const void *zSql){
-  sqlite3_value *pVal;
-  char const *zSql8;
-  int rc = SQLITE_NOMEM;
-
-  pVal = new(Mem)
-  sqlite3ValueSetStr(pVal, -1, zSql, SQLITE_UTF16NATIVE, SQLITE_STATIC);
-  zSql8 = sqlite3ValueText(pVal, SQLITE_UTF8);
-  if( zSql8 ){
-    rc = sqlite3_complete(zSql8);
-  }else{
-    rc = SQLITE_NOMEM;
-  }
-  pVal.Free()
-  return (*sqlite3)(nil).ApiExit(rc)
-}
-#endif /* SQLITE_OMIT_UTF16 */
 #endif /* SQLITE_OMIT_COMPLETE */

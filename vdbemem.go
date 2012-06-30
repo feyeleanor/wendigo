@@ -7,7 +7,7 @@
 /*
 ** If pMem is an object with a valid string representation, this routine
 ** ensures the internal encoding for the string representation is
-** 'desiredEnc', one of SQLITE_UTF8, SQLITE_UTF16LE or SQLITE_UTF16BE.
+** 'desiredEnc' is SQLITE_UTF8.
 **
 ** If pMem is not a string object, or the encoding of the string
 ** representation is already stored using the requested encoding, then this
@@ -17,27 +17,14 @@
 ** SQLITE_NOMEM may be returned if a malloc() fails during conversion
 ** between formats.
 */
- int sqlite3VdbeChangeEncoding(Mem *pMem, int desiredEnc){
+int sqlite3VdbeChangeEncoding(Mem *pMem, int desiredEnc){
   int rc;
   assert( (pMem.flags&MEM_RowSet)==0 );
-  assert( desiredEnc==SQLITE_UTF8 || desiredEnc==SQLITE_UTF16LE
-           || desiredEnc==SQLITE_UTF16BE );
+  assert( desiredEnc==SQLITE_UTF8 )
   if( !(pMem.flags&MEM_Str) || pMem.enc==desiredEnc ){
     return SQLITE_OK;
   }
-#ifdef SQLITE_OMIT_UTF16
   return SQLITE_ERROR;
-#else
-
-  /* MemTranslate() may return SQLITE_OK or SQLITE_NOMEM. If NOMEM is returned,
-  ** then the encoding of the value may not have changed.
-  */
-  rc = sqlite3VdbeMemTranslate(pMem, (byte)desiredEnc);
-  assert(rc==SQLITE_OK    || rc==SQLITE_NOMEM);
-  assert(rc==SQLITE_OK    || pMem.enc!=desiredEnc);
-  assert(rc==SQLITE_NOMEM || pMem.enc==desiredEnc);
-  return rc;
-#endif
 }
 
 /*
@@ -535,12 +522,6 @@ func (pMem *Mem) SetStr(z *string, enc byte, xDel func(interface{}) interface{})
 			pMem.enc = enc
 			pMem.Type = SQLITE_TEXT
 		}
-
-#ifndef SQLITE_OMIT_UTF16
-		if pMem.enc != SQLITE_UTF8 && pMem.HandleBom() != SQLITE_OK {
-			rc = SQLITE_NOMEM
-		}
-#endif
 	}
 	return
 }
@@ -607,7 +588,7 @@ int sqlite3MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
 		}
 
 		assert( pMem1.enc == pMem2.enc )
-		assert( pMem1.enc == SQLITE_UTF8 || pMem1.enc == SQLITE_UTF16LE || pMem1.enc == SQLITE_UTF16BE )
+		assert( pMem1.enc == SQLITE_UTF8 )
 
 		//	The collation sequence must be defined at this point, even if the user deletes the collation sequence after the vdbe program is compiled (this was not always the case).
 		assert( !pColl || pColl.xCmp )
@@ -713,17 +694,11 @@ int sqlite3MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
 /* This function is only available internally, it is not part of the
 ** external API. It works in a similar way to Mem_text(),
 ** except the data returned is in the encoding specified by the second
-** parameter, which must be one of SQLITE_UTF16BE, SQLITE_UTF16LE or
-** SQLITE_UTF8.
-**
-** (2006-02-16:)  The enc value can be or-ed with SQLITE_UTF16_ALIGNED.
-** If that is the case, then the result must be aligned on an even byte
-** boundary.
+** parameter, which must be SQLITE_UTF8.
 */
  const void *sqlite3ValueText(Mem* pVal, byte enc){
   if( !pVal ) return 0;
 
-  assert( (enc&3)==(enc&~SQLITE_UTF16_ALIGNED) );
   assert( (pVal.flags & MEM_RowSet)==0 );
 
   if( pVal.flags&MEM_Null ){
@@ -733,22 +708,15 @@ int sqlite3MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
   pVal.flags |= (pVal.flags & MEM_Blob)>>3;
   ExpandBlob(pVal)
   if( pVal.flags&MEM_Str ){
-    sqlite3VdbeChangeEncoding(pVal, enc & ~SQLITE_UTF16_ALIGNED);
-    if( (enc & SQLITE_UTF16_ALIGNED)!=0 && 1==(1&SQLITE_PTR_TO_INT(pVal.z)) ){
-      assert( (pVal.flags & (MEM_Ephem|MEM_Static))!=0 );
-      if( sqlite3VdbeMemMakeWriteable(pVal)!=SQLITE_OK ){
-        return 0;
-      }
-    }
+    sqlite3VdbeChangeEncoding(pVal, enc)
     sqlite3VdbeMemNulTerminate(pVal); /* IMP: R-31275-44060 */
   }else{
     assert( (pVal.flags&MEM_Blob)==0 );
     pVal.Stringify(enc)
     assert( 0==(1&SQLITE_PTR_TO_INT(pVal.z)) );
   }
-  assert(pVal.enc==(enc & ~SQLITE_UTF16_ALIGNED) || pVal.db==0
-              || pVal.db.mallocFailed );
-  if( pVal.enc==(enc & ~SQLITE_UTF16_ALIGNED) ){
+  assert(pVal.enc == enc || pVal.db == 0 || pVal.db.mallocFailed )
+  if pVal.enc == enc {
     return pVal.z;
   }else{
     return 0;

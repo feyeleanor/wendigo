@@ -3235,8 +3235,6 @@ func int sqlite3_rtree_geometry_callback(
 
   /* Create the new user-function. Register a destructor function to delete
   ** the context object when it is no longer required.  */
-  return sqlite3_create_function_v2(db, zGeom, -1, SQLITE_ANY, 
-      (void *)pGeomCtx, geomCallback, 0, 0, doSqlite3Free
-  );
+  return sqlite3_create_function_v2(db, zGeom, -1, SQLITE_ANY, (void *)pGeomCtx, geomCallback, 0, 0, doSqlite3Free)
 }
 #endif

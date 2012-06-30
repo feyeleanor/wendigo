@@ -131,7 +131,7 @@ struct Mem {
 	n		int;							//	Number of characters in string value, excluding '\0'
 	flags	uint16							//	Some combination of MEM_Null, MEM_Str, MEM_Dyn, etc.
 	type	byte							//	One of SQLITE_NULL, SQLITE_TEXT, SQLITE_INTEGER, etc
-	enc		byte							//	SQLITE_UTF8, SQLITE_UTF16BE, SQLITE_UTF16LE
+	enc		byte							//	SQLITE_UTF8
 	xDel	func(interface{}) interface{}	//	If not null, call this function to delete Mem.z
 	zMalloc	[]byte							//	Dynamic buffer allocated by sqlite3_malloc()
 }

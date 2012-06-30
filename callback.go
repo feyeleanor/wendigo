@@ -15,41 +15,25 @@ static void callCollNeeded(sqlite3 *db, int enc, const char *Name){
     db.xCollNeeded(db.pCollNeededArg, db, enc, zExternal);
     zExternal = nil
   }
-#ifndef SQLITE_OMIT_UTF16
-  if( db.xCollNeeded16 ){
-    char const *zExternal;
-    pTmp := db.NewValue()
-    sqlite3ValueSetStr(pTmp, -1, Name, SQLITE_UTF8, SQLITE_STATIC);
-    zExternal = sqlite3ValueText(pTmp, SQLITE_UTF16NATIVE);
-    if( zExternal ){
-      db.xCollNeeded16(db.pCollNeededArg, db, int(db.Encoding()), zExternal);
-    }
-    pTmp.Free()
-  }
-#endif
 }
 
 /*
 ** This routine is called if the collation factory fails to deliver a
 ** collation function in the best encoding but there may be other versions
 ** of this collation function (for other text encodings) available. Use one
-** of these instead if they exist. Avoid a UTF-8 <. UTF-16 conversion if
-** possible.
+** of these instead if they exist.
 */
 static int synthCollSeq(sqlite3 *db, CollSeq *pColl){
-  CollSeq *pColl2;
-  char *z = pColl.Name;
-  int i;
-  static const byte aEnc[] = { SQLITE_UTF16BE, SQLITE_UTF16LE, SQLITE_UTF8 };
-  for(i=0; i<3; i++){
-    pColl2 = sqlite3FindCollSeq(db, aEnc[i], z, 0);
-    if( pColl2.xCmp!=0 ){
-      memcpy(pColl, pColl2, sizeof(CollSeq));
-      pColl.xDel = 0;         /* Do not copy the destructor */
-      return SQLITE_OK;
-    }
-  }
-  return SQLITE_ERROR;
+	z := pColl.Name
+	aEnc := []byte{ SQLITE_UTF8 }
+	for _, enc := range aEnc {
+		if pColl2 := sqlite3FindCollSeq(db, enc, z, 0); pColl2.xCmp == nil {
+			memcpy(pColl, pColl2, sizeof(CollSeq));
+			pColl.xDel = nil
+			return SQLITE_OK
+		}
+	}
+	return SQLITE_ERROR
 }
 
 /*
@@ -141,8 +125,6 @@ static CollSeq *findCollSeqEntry(
 	if pColl := db.Collations[Name]; pColl == nil && create {
 		db.Collations[Name] = []*CollSeq{
 			&CollSeq{ Name: Name, enc: SQLITE_UTF8 },
-			&CollSeq{ Name: Name, enc: SQLITE_UTF16LE },
-			&CollSeq{ Name: Name, enc: SQLITE_UTF16BE },
 		}
 	}
 	return pColl
@@ -175,8 +157,8 @@ static CollSeq *findCollSeqEntry(
   }else{
     pColl = db.pDfltColl;
   }
-  assert( SQLITE_UTF8==1 && SQLITE_UTF16LE==2 && SQLITE_UTF16BE==3 );
-  assert( enc>=SQLITE_UTF8 && enc<=SQLITE_UTF16BE );
+  assert( SQLITE_UTF8 == 1 )
+  assert( enc == SQLITE_UTF8 )
   if( pColl ) pColl += enc-1;
   return pColl;
 }
@@ -186,22 +168,13 @@ static CollSeq *findCollSeqEntry(
 //	If nArg is -2 that means that we are searching for any function regardless of the number of arguments it uses, so return a positive match score for any
 //	The returned value is always between 0 and 6, as follows:
 //		0: Not a match.
-//		1: UTF8/16 conversion required and function takes any number of arguments.
-//		2: UTF16 byte order change required and function takes any number of args.
 //		3: encoding matches and function takes any number of arguments
-//		4: UTF8/16 conversion required - argument count matches exactly
-//		5: UTF16 byte order conversion required - argument count matches exactly
 //		6: Perfect match:  encoding and argument count match exactly.
 //	If nArg == -2 then any function with a non-null xStep or xFunc is a perfect match and any function with both xStep and xFunc NULL is a non-match.
 
 #define FUNC_PERFECT_MATCH 6				//	The score for a perfect match
 
 func (p *FuncDef) matchQuality(nArg int, enc byte) (match int) {
-static int matchQuality(
-  FuncDef *p,     /* The function we are evaluating for match quality */
-  int nArg,       /* Desired number of arguments.  (-1)==any */
-  byte enc          /* Desired text encoding */
-){
 	switch {
 	case nArg == -2:
 		//	nArg of -2 is a special case
@@ -224,8 +197,6 @@ static int matchQuality(
 		//	Bonus points if the text encoding matches
 		if enc == p.iPrefEnc {
 			match += 2						//	Exact encoding match
-		} else if (enc & p.iPrefEnc & 2) != 0 {
-			match += 1						//	Both are UTF16, but with different byte orders
 		}
 	}
 	return
@@ -249,12 +220,12 @@ func (f *FunctionTable) Insert(pDef *FuncDef) {
 func (db *sqlite3) FindFunction(Name string, nArg int, enc byte, createFunction bool) (pBest *FuncDef) {
 	assert( nArg >= -2 )
 	assert( nArg >= -1 || !createFunction )
-	assert( enc == SQLITE_UTF8 || enc == SQLITE_UTF16LE || enc == SQLITE_UTF16BE )
+	assert( enc == SQLITE_UTF8 )
 
 	//	First search for a match amongst the application-defined functions.
 	p := db.aFunc.Search(Name)
 	bestScore := 0
-	if score := matchQuality(p, nArg, enc); score > bestScore {
+	if score := p.matchQuality(nArg, enc); score > bestScore {
 		pBest = p
 		bestScore = score
 	}

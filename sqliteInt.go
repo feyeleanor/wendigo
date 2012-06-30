@@ -370,7 +370,7 @@ func const char *sqlite3_compileoption_get(int N);
 **
 ** Each open SQLite database is represented by a pointer to an instance of
 ** the opaque structure named "sqlite3".  It is useful to think of an sqlite3
-** pointer as an object.  The [sqlite3_open()], [sqlite3_open16()], and
+** pointer as an object.  The [sqlite3_open()] and
 ** [sqlite3_open_v2()] interfaces are its constructors, and [sqlite3::Close()]
 ** is its destructor.  There are many other interfaces (such as
 ** [sqlite3_prepare_v2()], [sqlite3_create_function()], and
@@ -979,7 +979,7 @@ typedef struct sqlite3_mutex sqlite3_mutex;
 **
 ** The flags argument to xOpen() includes all bits set in
 ** the flags argument to [sqlite3_open_v2()].  Or if [sqlite3_open()]
-** or [sqlite3_open16()] is used, then flags includes at least
+** is used, then flags includes at least
 ** [SQLITE_OPEN_READWRITE] | [SQLITE_OPEN_CREATE]. 
 ** If xOpen() opens a file read-only then it sets *pOutFlags to
 ** include [SQLITE_OPEN_READONLY].  Other bits in *pOutFlags may be set.
@@ -1560,7 +1560,7 @@ struct sqlite3_mem_methods {
 ** <dd> This option takes a single argument of type int. If non-zero, then
 ** URI handling is globally enabled. If the parameter is zero, then URI handling
 ** is globally disabled. If URI handling is globally enabled, all filenames
-** passed to [sqlite3_open()], [sqlite3_open_v2()], [sqlite3_open16()] or
+** passed to [sqlite3_open()] or [sqlite3_open_v2()] or
 ** specified as part of [ATTACH] commands are interpreted as URIs, regardless
 ** of whether or not the [SQLITE_OPEN_URI] flag is set when the database
 ** connection is opened. If it is globally disabled, filenames are
@@ -1856,20 +1856,10 @@ func void sqlite3_interrupt(sqlite3*);
 ** ^These routines do not parse the SQL statements thus
 ** will not detect syntactically incorrect SQL.
 **
-** ^(If SQLite has not been initialized using [Initialize()] prior 
-** to invoking sqlite3_complete16() then Initialize() is invoked
-** automatically by sqlite3_complete16().  If that initialization fails,
-** then the return value from sqlite3_complete16() will be non-zero
-** regardless of whether or not the input SQL is complete.)^
-**
 ** The input to [sqlite3_complete()] must be a zero-terminated
 ** UTF-8 string.
-**
-** The input to [sqlite3_complete16()] must be a zero-terminated
-** UTF-16 string in native byte order.
 */
 func int sqlite3_complete(const char *sql);
-func int sqlite3_complete16(const void *sql);
 
 /*
 ** CAPI3REF: Register A Callback To Handle SQLITE_BUSY Errors
@@ -2159,8 +2149,7 @@ func int64 sqlite3_memory_highwater(int resetFlag);
 ** ^This routine registers an authorizer callback with a particular
 ** [database connection], supplied in the first argument.
 ** ^The authorizer callback is invoked as SQL statements are being compiled
-** by [sqlite3_prepare()] or its variants [sqlite3_prepare_v2()],
-** [sqlite3_prepare16()] and [sqlite3_prepare16_v2()].  ^At various
+** by [sqlite3_prepare()] or its variant [sqlite3_prepare_v2()].  ^At various
 ** points during the compilation process, as logic is being created
 ** to perform various actions, the authorizer callback is invoked to
 ** see if those actions are allowed.  ^The authorizer callback should
@@ -2370,20 +2359,17 @@ func void *sqlite3_trace(sqlite3*, void(*xTrace)(void*,const char*), void*);
 **
 ** ^These routines open an SQLite database file as specified by the 
 ** filename argument. ^The filename argument is interpreted as UTF-8 for
-** sqlite3_open() and sqlite3_open_v2() and as UTF-16 in the native byte
-** order for sqlite3_open16(). ^(A [database connection] handle is usually
+** sqlite3_open() and sqlite3_open_v2(). ^(A [database connection] handle is usually
 ** returned in *ppDb, even if an error occurs.  The only exception is that
 ** if SQLite is unable to allocate memory to hold the [sqlite3] object,
 ** a NULL will be written into *ppDb instead of a pointer to the [sqlite3]
 ** object.)^ ^(If the database is opened (and/or created) successfully, then
 ** [SQLITE_OK] is returned.  Otherwise an [error code] is returned.)^ ^The
-** [sqlite3_errmsg()] or [sqlite3_errmsg16()] routines can be used to obtain
-** an English language description of the error following a failure of any
+** [sqlite3_errmsg()] routine can be used to obtain an English language description of the error following a failure of any
 ** of the sqlite3_open() routines.
 **
 ** ^The default encoding for the database will be UTF-8 if
-** sqlite3_open() or sqlite3_open_v2() is called and
-** UTF-16 in the native byte order if sqlite3_open16() is used.
+** sqlite3_open() or sqlite3_open_v2() is called.
 **
 ** Whether or not an error occurs when it is opened, resources
 ** associated with the [database connection] handle should be released by
@@ -2410,7 +2396,7 @@ func void *sqlite3_trace(sqlite3*, void(*xTrace)(void*,const char*), void*);
 ** ^(<dt>[SQLITE_OPEN_READWRITE] | [SQLITE_OPEN_CREATE]</dt>
 ** <dd>The database is opened for reading and writing, and is created if
 ** it does not already exist. This is the behavior that is always used for
-** sqlite3_open() and sqlite3_open16().</dd>)^
+** sqlite3_open().</dd>)^
 ** </dl>
 **
 ** If the 3rd parameter to sqlite3_open_v2() is not one of the
@@ -2563,10 +2549,6 @@ func int sqlite3_open(
   const char *filename,   /* Database filename (UTF-8) */
   sqlite3 **ppDb          /* OUT: SQLite db handle */
 );
-func int sqlite3_open16(
-  const void *filename,   /* Database filename (UTF-16) */
-  sqlite3 **ppDb          /* OUT: SQLite db handle */
-);
 func int sqlite3_open_v2(
   const char *filename,   /* Database filename (UTF-8) */
   sqlite3 **ppDb,         /* OUT: SQLite db handle */
@@ -2630,8 +2612,7 @@ func int64 sqlite3_uri_int64(const char*, const char*, int64);
 ** [extended result code] even when extended result codes are
 ** disabled.
 **
-** ^The sqlite3_errmsg() and sqlite3_errmsg16() return English-language
-** text that describes the error, as either UTF-8 or UTF-16 respectively.
+** ^The sqlite3_errmsg() returns English-language text that describes the error.
 ** ^(Memory to hold the error message string is managed internally.
 ** The application does not need to worry about freeing the result.
 ** However, the error string might be overwritten or deallocated by
@@ -2654,7 +2635,6 @@ func int64 sqlite3_uri_int64(const char*, const char*, int64);
 func int sqlite3_errcode(sqlite3 *db);
 func int sqlite3_extended_errcode(sqlite3 *db);
 func const char *sqlite3_errmsg(sqlite3*);
-func const void *sqlite3_errmsg16(sqlite3*);
 
 /*
 ** CAPI3REF: SQL Statement Object
@@ -2788,13 +2768,11 @@ const(
 ** program using one of these routines.
 **
 ** The first argument, "db", is a [database connection] obtained from a
-** prior successful call to [sqlite3_open()], [sqlite3_open_v2()] or
-** [sqlite3_open16()].  The database connection must not have been closed.
+** prior successful call to [sqlite3_open()] or [sqlite3_open_v2()].  The database connection must not have been closed.
 **
 ** The second argument, "zSql", is the statement to be compiled, encoded
-** as either UTF-8 or UTF-16.  The sqlite3_prepare() and sqlite3_prepare_v2()
-** interfaces use UTF-8, and sqlite3_prepare16() and sqlite3_prepare16_v2()
-** use UTF-16.
+** as UTF-8.  The sqlite3_prepare() and sqlite3_prepare_v2()
+** interfaces use UTF-8.
 **
 ** ^If the nByte argument is less than zero, then zSql is read up to the
 ** first zero terminator. ^If nByte is non-negative, then it is the maximum
@@ -2823,13 +2801,10 @@ const(
 ** ^On success, the sqlite3_prepare() family of routines return [SQLITE_OK];
 ** otherwise an [error code] is returned.
 **
-** The sqlite3_prepare_v2() and sqlite3_prepare16_v2() interfaces are
-** recommended for all new programs. The two older interfaces are retained
-** for backwards compatibility, but their use is discouraged.
-** ^In the "v2" interfaces, the prepared statement
-** that is returned (the [sqlite3_stmt] object) contains a copy of the
-** original SQL text. This causes the [sqlite3_step()] interface to
-** behave differently in three ways:
+** The sqlite3_prepare_v2() interface is recommended for all new programs. The older interface is retained
+** for backwards compatibility, but its use is discouraged.
+** ^In the "v2" interfaces, the prepared statement that is returned (the [sqlite3_stmt] object) contains a copy of the
+** original SQL text. This causes the [sqlite3_step()] interface to behave differently in three ways:
 **
 ** <ol>
 ** <li>
@@ -2873,27 +2848,13 @@ func int sqlite3_prepare_v2(
   sqlite3_stmt **ppStmt,  /* OUT: Statement handle */
   const char **pzTail     /* OUT: Pointer to unused portion of zSql */
 );
-func int sqlite3_prepare16(
-  sqlite3 *db,            /* Database handle */
-  const void *zSql,       /* SQL statement, UTF-16 encoded */
-  int nByte,              /* Maximum length of zSql in bytes. */
-  sqlite3_stmt **ppStmt,  /* OUT: Statement handle */
-  const void **pzTail     /* OUT: Pointer to unused portion of zSql */
-);
-func int sqlite3_prepare16_v2(
-  sqlite3 *db,            /* Database handle */
-  const void *zSql,       /* SQL statement, UTF-16 encoded */
-  int nByte,              /* Maximum length of zSql in bytes. */
-  sqlite3_stmt **ppStmt,  /* OUT: Statement handle */
-  const void **pzTail     /* OUT: Pointer to unused portion of zSql */
-);
 
 /*
 ** CAPI3REF: Retrieving Statement SQL
 **
 ** ^This interface can be used to retrieve a saved copy of the original
 ** SQL text used to create a [prepared statement] if that statement was
-** compiled using either [sqlite3_prepare_v2()] or [sqlite3_prepare16_v2()].
+** compiled using [sqlite3_prepare_v2()].
 */
 func const char *sqlite3_sql(sqlite3_stmt *pStmt);
 
@@ -3041,18 +3002,17 @@ typedef struct sqlite3_context sqlite3_context;
 ** ^If the fourth parameter is negative, the length of the string is
 ** the number of bytes up to the first zero terminator.
 ** If a non-negative fourth parameter is provided to sqlite3_bind_text()
-** or sqlite3_bind_text16() then that parameter must be the byte offset
+** then that parameter must be the byte offset
 ** where the NUL terminator would occur assuming the string were NUL
 ** terminated.  If any NUL characters occur at byte offsets less than 
 ** the value of the fourth parameter then the resulting string value will
 ** contain embedded NULs.  The result of expressions involving strings
 ** with embedded NULs is undefined.
 **
-** ^The fifth argument to BindBlob(), sqlite3_bind_text(), and
-** sqlite3_bind_text16() is a destructor used to dispose of the BLOB or
+** ^The fifth argument to BindBlob() and sqlite3_bind_text() is a destructor used to dispose of the BLOB or
 ** string after SQLite has finished with it.  ^The destructor is called
-** to dispose of the BLOB or string even if the call to BindBlob(),
-** sqlite3_bind_text(), or sqlite3_bind_text16() fails.  
+** to dispose of the BLOB or string even if the call to BindBlob() or
+** sqlite3_bind_text() fails.  
 ** ^If the fifth argument is
 ** the special value [SQLITE_STATIC], then SQLite assumes that the
 ** information is in static, unmanaged space and does not need to be freed.
@@ -3091,7 +3051,6 @@ func int sqlite3_bind_int(sqlite3_stmt*, int, int);
 func int sqlite3_bind_int64(sqlite3_stmt*, int, int64);
 func int sqlite3_bind_null(sqlite3_stmt*, int);
 func int sqlite3_bind_text(sqlite3_stmt*, int, const char*, int n, void(*)(void*));
-func int sqlite3_bind_text16(sqlite3_stmt*, int, const void*, int, void(*)(void*));
 
 /*
 ** CAPI3REF: Number Of SQL Parameters
@@ -3130,9 +3089,7 @@ func int sqlite3_bind_parameter_count(sqlite3_stmt*);
 **
 ** ^If the value N is out of range or if the N-th parameter is
 ** nameless, then NULL is returned.  ^The returned string is
-** always in UTF-8 encoding even if the named parameter was
-** originally specified as UTF-16 in [sqlite3_prepare16()] or
-** [sqlite3_prepare16_v2()].
+** always in UTF-8 encoding.
 **
 ** See also: [BindBlob|sqlite3_bind()],
 ** [sqlite3_bind_parameter_count()], and
@@ -3147,8 +3104,7 @@ func const char *sqlite3_bind_parameter_name(sqlite3_stmt*, int);
 ** index value returned is suitable for use as the second
 ** parameter to [BindBlob|sqlite3_bind()].  ^A zero
 ** is returned if no matching parameter is found.  ^The parameter
-** name must be given in UTF-8 even if the original statement
-** was prepared from UTF-16 text using [sqlite3_prepare16_v2()].
+** name must be given in UTF-8.
 **
 ** See also: [BindBlob|sqlite3_bind()],
 ** [sqlite3_bind_parameter_count()], and
@@ -3181,21 +3137,17 @@ func int sqlite3_column_count(sqlite3_stmt *pStmt);
 **
 ** ^These routines return the name assigned to a particular column
 ** in the result set of a [SELECT] statement.  ^The sqlite3_column_name()
-** interface returns a pointer to a zero-terminated UTF-8 string
-** and sqlite3_column_name16() returns a pointer to a zero-terminated
-** UTF-16 string.  ^The first parameter is the [prepared statement]
+** interface returns a pointer to a zero-terminated UTF-8 string.  ^The first parameter is the [prepared statement]
 ** that implements the [SELECT] statement. ^The second parameter is the
 ** column number.  ^The leftmost column is number 0.
 **
 ** ^The returned string pointer is valid until either the [prepared statement]
 ** is destroyed by [sqlite3_finalize()] or until the statement is automatically
 ** reprepared by the first call to [sqlite3_step()] for a particular run
-** or until the next call to
-** sqlite3_column_name() or sqlite3_column_name16() on the same column.
+** or until the next call to sqlite3_column_name() on the same column.
 **
 ** ^If sqlite3_malloc() fails during the processing of either routine
-** (for example during a conversion from UTF-8 to UTF-16) then a
-** NULL pointer is returned.
+** then a NULL pointer is returned.
 **
 ** ^The name of a result column is the value of the "AS" clause for
 ** that column, if there is an AS clause.  If there is no AS clause
@@ -3203,7 +3155,6 @@ func int sqlite3_column_count(sqlite3_stmt *pStmt);
 ** one release of SQLite to the next.
 */
 func const char *sqlite3_column_name(sqlite3_stmt*, int N);
-func const void *sqlite3_column_name16(sqlite3_stmt*, int N);
 
 /*
 ** CAPI3REF: Source Of Data In A Query Result
@@ -3211,9 +3162,7 @@ func const void *sqlite3_column_name16(sqlite3_stmt*, int N);
 ** ^These routines provide a means to determine the database, table, and
 ** table column that is the origin of a particular result column in
 ** [SELECT] statement.
-** ^The name of the database or table or column can be returned as
-** either a UTF-8 or UTF-16 string.  ^The _database_ routines return
-** the database name, the _table_ routines return the table name, and
+** ^The _database_ routines return the database name, the _table_ routines return the table name, and
 ** the origin_ routines return the column name.
 ** ^The returned string is valid until the [prepared statement] is destroyed
 ** using [sqlite3_finalize()] or until the statement is automatically
@@ -3235,9 +3184,6 @@ func const void *sqlite3_column_name16(sqlite3_stmt*, int N);
 ** occurs.  ^Otherwise, they return the name of the attached database, table,
 ** or column that query result column was extracted from.
 **
-** ^As with all other SQLite APIs, those whose names end with "16" return
-** UTF-16 encoded strings and the other functions return UTF-8.
-**
 ** ^These APIs are only available if the library was compiled with the
 ** [SQLITE_ENABLE_COLUMN_METADATA] C-preprocessor symbol.
 **
@@ -3251,11 +3197,8 @@ func const void *sqlite3_column_name16(sqlite3_stmt*, int N);
 ** at the same time then the results are undefined.
 */
 func const char *sqlite3_column_database_name(sqlite3_stmt*,int);
-func const void *sqlite3_column_database_name16(sqlite3_stmt*,int);
 func const char *sqlite3_column_table_name(sqlite3_stmt*,int);
-func const void *sqlite3_column_table_name16(sqlite3_stmt*,int);
 func const char *sqlite3_column_origin_name(sqlite3_stmt*,int);
-func const void *sqlite3_column_origin_name16(sqlite3_stmt*,int);
 
 /*
 ** CAPI3REF: Declared Datatype Of A Query Result
@@ -3287,20 +3230,16 @@ func const void *sqlite3_column_origin_name16(sqlite3_stmt*,int);
 ** used to hold those values.
 */
 func const char *sqlite3_column_decltype(sqlite3_stmt*,int);
-func const void *sqlite3_column_decltype16(sqlite3_stmt*,int);
 
 /*
 ** CAPI3REF: Evaluate An SQL Statement
 **
-** After a [prepared statement] has been prepared using either
-** [sqlite3_prepare_v2()] or [sqlite3_prepare16_v2()] or one of the legacy
-** interfaces [sqlite3_prepare()] or [sqlite3_prepare16()], this function
-** must be called one or more times to evaluate the statement.
+** After a [prepared statement] has been prepared using either [sqlite3_prepare_v2()] or the legacy
+** interfaces [sqlite3_prepare()], this function must be called one or more times to evaluate the statement.
 **
 ** The details of the behavior of the sqlite3_step() interface depend
 ** on whether the statement was prepared using the newer "v2" interface
-** [sqlite3_prepare_v2()] and [sqlite3_prepare16_v2()] or the older legacy
-** interface [sqlite3_prepare()] and [sqlite3_prepare16()].  The use of the
+** [sqlite3_prepare_v2()] or the older legacy interface [sqlite3_prepare()].  The use of the
 ** new "v2" interface is recommended for new applications but the legacy
 ** interface will continue to be supported.
 **
@@ -3361,8 +3300,7 @@ func const void *sqlite3_column_decltype16(sqlite3_stmt*,int);
 ** specific [error codes] that better describes the error.
 ** We admit that this is a goofy design.  The problem has been fixed
 ** with the "v2" interface.  If you prepare all of your SQL statements
-** using either [sqlite3_prepare_v2()] or [sqlite3_prepare16_v2()] instead
-** of the legacy [sqlite3_prepare()] and [sqlite3_prepare16()] interfaces,
+** using [sqlite3_prepare_v2()] instead of the legacy [sqlite3_prepare()] interfaces,
 ** then the more specific [error codes] are returned directly
 ** by sqlite3_step().  The use of the "v2" interface is recommended.
 */
@@ -3459,29 +3397,16 @@ func int sqlite3_data_count(sqlite3_stmt *pStmt);
 **
 ** ^If the result is a BLOB or UTF-8 string then the sqlite3_column_bytes()
 ** routine returns the number of bytes in that BLOB or string.
-** ^If the result is a UTF-16 string, then sqlite3_column_bytes() converts
-** the string to UTF-8 and then returns the number of bytes.
 ** ^If the result is a numeric value then sqlite3_column_bytes() uses
 ** [fmt.Sprintf()] to convert that value to a UTF-8 string and returns
 ** the number of bytes in that string.
 ** ^If the result is NULL, then sqlite3_column_bytes() returns zero.
 **
-** ^If the result is a BLOB or UTF-16 string then the sqlite3_column_bytes16()
-** routine returns the number of bytes in that BLOB or string.
-** ^If the result is a UTF-8 string, then sqlite3_column_bytes16() converts
-** the string to UTF-16 and then returns the number of bytes.
-** ^If the result is a numeric value then sqlite3_column_bytes16() uses
-** [fmt.Sprintf()] to convert that value to a UTF-16 string and returns
-** the number of bytes in that string.
-** ^If the result is NULL, then sqlite3_column_bytes16() returns zero.
+** ^The value returned by [sqlite3_column_bytes()] does not include the zero terminators at the end
+** of the string.  ^For clarity: the value returned by
+** [sqlite3_column_bytes()] is the number of bytes in the string, not the number of characters.
 **
-** ^The values returned by [sqlite3_column_bytes()] and 
-** [sqlite3_column_bytes16()] do not include the zero terminators at the end
-** of the string.  ^For clarity: the values returned by
-** [sqlite3_column_bytes()] and [sqlite3_column_bytes16()] are the number of
-** bytes in the string, not the number of characters.
-**
-** ^Strings returned by sqlite3_column_text() and sqlite3_column_text16(),
+** ^Strings returned by sqlite3_column_text(),
 ** even empty strings, are always zero-terminated.  ^The return
 ** value from sqlite3_column_blob() for a zero-length BLOB is a NULL pointer.
 **
@@ -3529,28 +3454,13 @@ func int sqlite3_data_count(sqlite3_stmt *pStmt);
 ** C programmers.
 **
 ** Note that when type conversions occur, pointers returned by prior
-** calls to sqlite3_column_blob(), sqlite3_column_text(), and/or
-** sqlite3_column_text16() may be invalidated.
-** Type conversions and pointer invalidations might occur
-** in the following cases:
+** calls to sqlite3_column_blob() and/or sqlite3_column_text() may be invalidated.
+** Type conversions and pointer invalidations might occur in the following case:
 **
 ** <ul>
-** <li> The initial content is a BLOB and sqlite3_column_text() or
-**      sqlite3_column_text16() is called.  A zero-terminator might
+** <li> The initial content is a BLOB and sqlite3_column_text() is called.  A zero-terminator might
 **      need to be added to the string.</li>
-** <li> The initial content is UTF-8 text and sqlite3_column_bytes16() or
-**      sqlite3_column_text16() is called.  The content must be converted
-**      to UTF-16.</li>
-** <li> The initial content is UTF-16 text and sqlite3_column_bytes() or
-**      sqlite3_column_text() is called.  The content must be converted
-**      to UTF-8.</li>
 ** </ul>
-**
-** ^Conversions between UTF-16be and UTF-16le are always done in place and do
-** not invalidate a prior pointer, though of course the content of the buffer
-** that the prior pointer references will have been modified.  Other kinds
-** of conversion are done in place when it is possible, but sometimes they
-** are not possible and in those cases prior pointers are invalidated.
 **
 ** The safest and easiest to remember policy is to invoke these routines
 ** in one of the following ways:
@@ -3558,16 +3468,10 @@ func int sqlite3_data_count(sqlite3_stmt *pStmt);
 ** <ul>
 **  <li>sqlite3_column_text() followed by sqlite3_column_bytes()</li>
 **  <li>sqlite3_column_blob() followed by sqlite3_column_bytes()</li>
-**  <li>sqlite3_column_text16() followed by sqlite3_column_bytes16()</li>
 ** </ul>
 **
-** In other words, you should call sqlite3_column_text(),
-** sqlite3_column_blob(), or sqlite3_column_text16() first to force the result
-** into the desired format, then invoke sqlite3_column_bytes() or
-** sqlite3_column_bytes16() to find the size of the result.  Do not mix calls
-** to sqlite3_column_text() or sqlite3_column_blob() with calls to
-** sqlite3_column_bytes16(), and do not mix calls to sqlite3_column_text16()
-** with calls to sqlite3_column_bytes().
+** In other words, you should call sqlite3_column_text() or sqlite3_column_blob() first to force the result
+** into the desired format, then invoke sqlite3_column_bytes() to find the size of the result.
 **
 ** ^The pointers returned are valid until a type conversion occurs as
 ** described above, or until [sqlite3_step()] or [sqlite3_reset()] or
@@ -3582,12 +3486,10 @@ func int sqlite3_data_count(sqlite3_stmt *pStmt);
 */
 func const void *sqlite3_column_blob(sqlite3_stmt*, int iCol);
 func int sqlite3_column_bytes(sqlite3_stmt*, int iCol);
-func int sqlite3_column_bytes16(sqlite3_stmt*, int iCol);
 func double sqlite3_column_double(sqlite3_stmt*, int iCol);
 func int sqlite3_column_int(sqlite3_stmt*, int iCol);
 func int64 sqlite3_column_int64(sqlite3_stmt*, int iCol);
 func const unsigned char *sqlite3_column_text(sqlite3_stmt*, int iCol);
-func const void *sqlite3_column_text16(sqlite3_stmt*, int iCol);
 func int sqlite3_column_type(sqlite3_stmt*, int iCol);
 func sqlite3_value *sqlite3_column_value(sqlite3_stmt*, int iCol);
 
@@ -3666,7 +3568,7 @@ func int sqlite3_reset(sqlite3_stmt *pStmt);
 ** ^The second parameter is the name of the SQL function to be created or
 ** redefined.  ^The length of the name is limited to 255 bytes in a UTF-8
 ** representation, exclusive of the zero-terminator.  ^Note that the name
-** length limit is in UTF-8 bytes, not characters nor UTF-16 bytes.  
+** length limit is in UTF-8 bytes, not characters.  
 ** ^Any attempt to create a function with a longer name
 ** will result in [SQLITE_MISUSE] being returned.
 **
@@ -3680,11 +3582,9 @@ func int sqlite3_reset(sqlite3_stmt *pStmt);
 **
 ** ^The fourth parameter, eTextRep, specifies what
 ** [SQLITE_UTF8 | text encoding] this SQL function prefers for
-** its parameters.  Every SQL function implementation must be able to work
-** with UTF-8, UTF-16le, or UTF-16be.  But some implementations may be
+** its parameters.  Every SQL function implementation must be able to work with UTF-8. But some implementations may be
 ** more efficient with one encoding than another.  ^An application may
-** invoke sqlite3_create_function() or sqlite3_create_function16() multiple
-** times with the same function but with different values of eTextRep.
+** invoke sqlite3_create_function() multiple times with the same function but with different values of eTextRep.
 ** ^When multiple implementations of the same function are available, SQLite
 ** will pick the one that involves the least amount of data conversion.
 ** If there is only a single implementation which does not care what text
@@ -3721,9 +3621,6 @@ func int sqlite3_reset(sqlite3_stmt *pStmt);
 ** a negative nArg.  ^A function where the preferred text encoding
 ** matches the database encoding is a better
 ** match than a function where the encoding is different.  
-** ^A function where the encoding difference is between UTF16le and UTF16be
-** is a closer match than a function where the encoding difference is
-** between UTF8 and UTF16.
 **
 ** ^Built-in functions may be overloaded by new application-defined functions.
 **
@@ -3735,16 +3632,6 @@ func int sqlite3_reset(sqlite3_stmt *pStmt);
 func int sqlite3_create_function(
   sqlite3 *db,
   const char *zFunctionName,
-  int nArg,
-  int eTextRep,
-  void *pApp,
-  void (*xFunc)(sqlite3_context*,int,sqlite3_value**),
-  void (*xStep)(sqlite3_context*,int,sqlite3_value**),
-  void (*xFinal)(sqlite3_context*)
-);
-func int sqlite3_create_function16(
-  sqlite3 *db,
-  const void *zFunctionName,
   int nArg,
   int eTextRep,
   void *pApp,
@@ -3771,11 +3658,7 @@ func int sqlite3_create_function_v2(
 ** text encodings supported by SQLite.
 */
 #define SQLITE_UTF8           1
-#define SQLITE_UTF16LE        2
-#define SQLITE_UTF16BE        3
-#define SQLITE_UTF16          4    /* Use native byte order */
 #define SQLITE_ANY            5    /* sqlite3_create_function only */
-#define SQLITE_UTF16_ALIGNED  8    /* sqlite3_create_collation only */
 
 /*
 ** CAPI3REF: Obtaining SQL Function Parameter Values
@@ -3785,8 +3668,7 @@ func int sqlite3_create_function_v2(
 ** the function or aggregate.
 **
 ** The xFunc (for scalar functions) or xStep (for aggregates) parameters
-** to [sqlite3_create_function()] and [sqlite3_create_function16()]
-** define callbacks that implement the SQL functions and aggregates.
+** to [sqlite3_create_function()] define callbacks that implement the SQL functions and aggregates.
 ** The 3rd parameter to these callbacks is an array of pointers to
 ** [protected sqlite3_value] objects.  There is one [sqlite3_value] object for
 ** each parameter to the SQL function.  These routines are used to
@@ -3800,11 +3682,6 @@ func int sqlite3_create_function_v2(
 ** except that  these routines take a single [protected sqlite3_value] object
 ** pointer instead of a [sqlite3_stmt*] pointer and an integer column number.
 **
-** ^The sqlite3_value_text16() interface extracts a UTF-16 string
-** in the native byte-order of the host machine.  ^The
-** sqlite3_value_text16be() and sqlite3_value_text16le() interfaces
-** extract UTF-16 strings as big-endian and little-endian respectively.
-**
 ** ^(The sqlite3_value_numeric_type() interface attempts to apply
 ** numeric affinity to the value.  This means that an attempt is
 ** made to convert the value to an integer or floating point.  If
@@ -3814,24 +3691,18 @@ func int sqlite3_create_function_v2(
 ** The [SQLITE_INTEGER | datatype] after conversion is returned.)^
 **
 ** Please pay particular attention to the fact that the pointer returned
-** from [sqlite3_value_blob()], [sqlite3_value_text()], or
-** [sqlite3_value_text16()] can be invalidated by a subsequent call to
-** [sqlite3_value_bytes()], [sqlite3_value_bytes16()], [sqlite3_value_text()],
-** or [sqlite3_value_text16()].
+** from [sqlite3_value_blob()] or [sqlite3_value_text()] can be invalidated by a subsequent call to
+** [sqlite3_value_bytes()] or [sqlite3_value_text()].
 **
 ** These routines must be called from the same thread as
 ** the SQL function that supplied the [sqlite3_value*] parameters.
 */
 func const void *sqlite3_value_blob(sqlite3_value*);
 func int sqlite3_value_bytes(sqlite3_value*);
-func int sqlite3_value_bytes16(sqlite3_value*);
 func double sqlite3_value_double(sqlite3_value*);
 func int sqlite3_value_int(sqlite3_value*);
 func int64 sqlite3_value_int64(sqlite3_value*);
 func const unsigned char *sqlite3_value_text(sqlite3_value*);
-func const void *sqlite3_value_text16(sqlite3_value*);
-func const void *sqlite3_value_text16le(sqlite3_value*);
-func const void *sqlite3_value_text16be(sqlite3_value*);
 func int sqlite3_value_type(sqlite3_value*);
 func int sqlite3_value_numeric_type(sqlite3_value*);
 
@@ -3881,8 +3752,7 @@ func void *sqlite3_aggregate_context(sqlite3_context*, int nBytes);
 **
 ** ^The sqlite3_user_data() interface returns a copy of
 ** the pointer that was the pUserData parameter (the 5th parameter)
-** of the [sqlite3_create_function()]
-** and [sqlite3_create_function16()] routines that originally
+** of the [sqlite3_create_function()] routine that originally
 ** registered the application defined function.
 **
 ** This routine must be called from the same thread in which
@@ -3895,8 +3765,7 @@ func void *sqlite3_user_data(sqlite3_context*);
 **
 ** ^The sqlite3_context_db_handle() interface returns a copy of
 ** the pointer to the [database connection] (the 1st parameter)
-** of the [sqlite3_create_function()]
-** and [sqlite3_create_function16()] routines that originally
+** of the [sqlite3_create_function()] routine that originally
 ** registered the application defined function.
 */
 func sqlite3 *sqlite3_context_db_handle(sqlite3_context*);
@@ -3970,8 +3839,7 @@ typedef void (*sqlite3_destructor_type)(void*);
 **
 ** These routines are used by the xFunc or xFinal callbacks that
 ** implement SQL functions and aggregates.  See
-** [sqlite3_create_function()] and [sqlite3_create_function16()]
-** for additional information.
+** [sqlite3_create_function()] for additional information.
 **
 ** These functions work very much like the [parameter binding] family of
 ** functions used to bind values to host parameters in prepared statements.
@@ -3990,27 +3858,21 @@ typedef void (*sqlite3_destructor_type)(void*);
 ** an application-defined function to be a floating point value specified
 ** by its 2nd argument.
 **
-** ^The sqlite3_result_error() and sqlite3_result_error16() functions
-** cause the implemented SQL function to throw an exception.
+** ^The sqlite3_result_error() function causes the implemented SQL function to throw an exception.
 ** ^SQLite uses the string pointed to by the
-** 2nd parameter of sqlite3_result_error() or sqlite3_result_error16()
+** 2nd parameter of sqlite3_result_error()
 ** as the text of an error message.  ^SQLite interprets the error
-** message string from sqlite3_result_error() as UTF-8. ^SQLite
-** interprets the string from sqlite3_result_error16() as UTF-16 in native
-** byte order.  ^If the third parameter to sqlite3_result_error()
-** or sqlite3_result_error16() is negative then SQLite takes as the error
-** message all text up through the first zero character.
-** ^If the third parameter to sqlite3_result_error() or
-** sqlite3_result_error16() is non-negative then SQLite takes that many
+** message string from sqlite3_result_error() as UTF-8. ^If the third parameter to sqlite3_result_error()
+** is negative then SQLite takes as the error message all text up through the first zero character.
+** ^If the third parameter to sqlite3_result_error() is non-negative then SQLite takes that many
 ** bytes (not characters) from the 2nd parameter as the error message.
-** ^The sqlite3_result_error() and sqlite3_result_error16()
-** routines make a private copy of the error message text before
+** ^The sqlite3_result_error() routines make a private copy of the error message text before
 ** they return.  Hence, the calling function can deallocate or
 ** modify the text after they return without harm.
 ** ^The sqlite3_result_error_code() function changes the error code
 ** returned by SQLite as a result of an error in a function.  ^By default,
 ** the error code is SQLITE_ERROR.  ^A subsequent call to sqlite3_result_error()
-** or sqlite3_result_error16() resets the error code to SQLITE_ERROR.
+** resets the error code to SQLITE_ERROR.
 **
 ** ^The sqlite3_result_toobig() interface causes SQLite to throw an error
 ** indicating that a string or BLOB is too long to represent.
@@ -4028,11 +3890,9 @@ typedef void (*sqlite3_destructor_type)(void*);
 ** ^The sqlite3_result_null() interface sets the return value
 ** of the application-defined function to be NULL.
 **
-** ^The sqlite3_result_text(), sqlite3_result_text16(),
-** sqlite3_result_text16le(), and sqlite3_result_text16be() interfaces
-** set the return value of the application-defined function to be
-** a text string which is represented as UTF-8, UTF-16 native byte order,
-** UTF-16 little endian, or UTF-16 big endian, respectively.
+** ^The sqlite3_result_text() interface
+** sets the return value of the application-defined function to be
+** a text string which is represented as UTF-8.
 ** ^SQLite takes the text result from the application from
 ** the 2nd parameter of the sqlite3_result_text* interfaces.
 ** ^If the 3rd parameter to the sqlite3_result_text* interfaces
@@ -4078,7 +3938,6 @@ typedef void (*sqlite3_destructor_type)(void*);
 func void sqlite3_result_blob(sqlite3_context*, const void*, int, void(*)(void*));
 func void sqlite3_result_double(sqlite3_context*, double);
 func void sqlite3_result_error(sqlite3_context*, const char*, int);
-func void sqlite3_result_error16(sqlite3_context*, const void*, int);
 func void sqlite3_result_error_toobig(sqlite3_context*);
 func void sqlite3_result_error_nomem(sqlite3_context*);
 func void sqlite3_result_error_code(sqlite3_context*, int);
@@ -4086,9 +3945,6 @@ func void sqlite3_result_int(sqlite3_context*, int);
 func void sqlite3_result_int64(sqlite3_context*, int64);
 func void sqlite3_result_null(sqlite3_context*);
 func void sqlite3_result_text(sqlite3_context*, const char*, int, void(*)(void*));
-func void sqlite3_result_text16(sqlite3_context*, const void*, int, void(*)(void*));
-func void sqlite3_result_text16le(sqlite3_context*, const void*, int,void(*)(void*));
-func void sqlite3_result_text16be(sqlite3_context*, const void*, int,void(*)(void*));
 func void sqlite3_result_value(sqlite3_context*, sqlite3_value*);
 
 /*
@@ -4097,26 +3953,16 @@ func void sqlite3_result_value(sqlite3_context*, sqlite3_value*);
 ** ^These functions add, remove, or modify a [collation] associated
 ** with the [database connection] specified as the first argument.
 **
-** ^The name of the collation is a UTF-8 string
-** for sqlite3_create_collation() and sqlite3_create_collation_v2()
-** and a UTF-16 string in native byte order for sqlite3_create_collation16().
+** ^The name of the collation is a UTF-8 string for sqlite3_create_collation() and sqlite3_create_collation_v2().
 ** ^Collation names that compare equal according to [sqlite3_strnicmp()] are
 ** considered to be the same name.
 **
 ** ^(The third argument (eTextRep) must be one of the constants:
 ** <ul>
 ** <li> [SQLITE_UTF8],
-** <li> [SQLITE_UTF16LE],
-** <li> [SQLITE_UTF16BE],
-** <li> [SQLITE_UTF16], or
-** <li> [SQLITE_UTF16_ALIGNED].
 ** </ul>)^
 ** ^The eTextRep argument determines the encoding of strings passed
 ** to the collating function callback, xCallback.
-** ^The [SQLITE_UTF16] and [SQLITE_UTF16_ALIGNED] values for eTextRep
-** force strings to be UTF16 with native byte order.
-** ^The [SQLITE_UTF16_ALIGNED] value for eTextRep forces strings to begin
-** on an even byte address.
 **
 ** ^The fourth argument, pArg, is an application data pointer that is passed
 ** through as the first argument to the collating function callback.
@@ -4168,7 +4014,7 @@ func void sqlite3_result_value(sqlite3_context*, sqlite3_value*);
 ** is unfortunate but cannot be changed without breaking backwards 
 ** compatibility.
 **
-** See also:  [sqlite3_collation_needed()] and [sqlite3_collation_needed16()].
+** See also:  [sqlite3_collation_needed()].
 */
 func int sqlite3_create_collation(
   sqlite3*, 
@@ -4185,13 +4031,6 @@ func int sqlite3_create_collation_v2(
   int(*xCompare)(void*,int,const void*,int,const void*),
   void(*xDestroy)(void*)
 );
-func int sqlite3_create_collation16(
-  sqlite3*, 
-  const void *Name,
-  int eTextRep, 
-  void *pArg,
-  int(*xCompare)(void*,int,const void*,int,const void*)
-);
 
 /*
 ** CAPI3REF: Collation Needed Callbacks
@@ -4203,31 +4042,19 @@ func int sqlite3_create_collation16(
 **
 ** ^If the function is registered using the sqlite3_collation_needed() API,
 ** then it is passed the names of undefined collation sequences as strings
-** encoded in UTF-8. ^If sqlite3_collation_needed16() is used,
-** the names are passed as UTF-16 in machine native byte order.
-** ^A call to either function replaces the existing collation-needed callback.
+** encoded in UTF-8. A call to this function replaces the existing collation-needed callback.
 **
 ** ^(When the callback is invoked, the first argument passed is a copy
-** of the second argument to sqlite3_collation_needed() or
-** sqlite3_collation_needed16().  The second argument is the database
-** connection.  The third argument is one of [SQLITE_UTF8], [SQLITE_UTF16BE],
-** or [SQLITE_UTF16LE], indicating the most desirable form of the collation
-** sequence function required.  The fourth parameter is the name of the
-** required collation sequence.)^
+** of the second argument to sqlite3_collation_needed(). The second argument is the database
+** connection. The third argument is [SQLITE_UTF8] indicating the most desirable form of the collation
+** sequence function required. The fourth parameter is the name of the required collation sequence.)^
 **
-** The callback function should register the desired collation using
-** [sqlite3_create_collation()], [sqlite3_create_collation16()], or
-** [sqlite3_create_collation_v2()].
+** The callback function should register the desired collation using [sqlite3_create_collation()] or [sqlite3_create_collation_v2()].
 */
 func int sqlite3_collation_needed(
   sqlite3*, 
   void*, 
   void(*)(void*,sqlite3*,int eTextRep,const char*)
-);
-func int sqlite3_collation_needed16(
-  sqlite3*, 
-  void*,
-  void(*)(void*,sqlite3*,int eTextRep,const void*)
 );
 
 /*
@@ -4710,7 +4537,7 @@ func int sqlite3_enable_load_extension(sqlite3 *db, int onoff);
 ** point to an appropriate error message
 ** and return an appropriate [error code].  ^SQLite ensures that *pzErrMsg
 ** is NULL before calling the xEntryPoint().  ^If any
-** xEntryPoint() returns an error, the [sqlite3_open()], [sqlite3_open16()],
+** xEntryPoint() returns an error, the [sqlite3_open()],
 ** or [sqlite3_open_v2()] call that provoked the xEntryPoint() will fail.
 **
 ** ^Calling sqlite3_auto_extension(X) with an entry point X that is already
@@ -6057,8 +5884,7 @@ typedef struct sqlite3_backup sqlite3_backup;
 ** returned and an error code and error message are stored in the
 ** destination [database connection] D.
 ** ^The error code and message for the failed call to backup_init()
-** can be retrieved using the [sqlite3_errcode()], [sqlite3_errmsg()], and/or
-** [sqlite3_errmsg16()] functions.
+** can be retrieved using the [sqlite3_errcode()] or [sqlite3_errmsg()] functions.
 ** ^A successful call to backup_init() returns a pointer to an
 ** [sqlite3_backup] object.
 ** ^The [sqlite3_backup] object may be used with the backup::step() and
@@ -6814,16 +6640,6 @@ const BIG_DOUBLE = 1e99
 #endif
 
 /*
-** Check to see if this machine uses EBCDIC.  (Yes, believe it or
-** not, there are still machines out there that use EBCDIC.)
-*/
-#if 'A' == '\301'
-# define SQLITE_EBCDIC 1
-#else
-# define SQLITE_ASCII 1
-#endif
-
-/*
 ** Integers of known sizes.  These typedefs might change for architectures
 ** where the sizes very.  Preprocessor macros are available so that the
 ** types can be conveniently redefined at compile-type.  Like this:
@@ -6900,16 +6716,9 @@ typedef INT8_TYPE i8;              /* 1-byte signed integer */
 ** Macros to determine whether the machine is big or little endian,
 ** evaluated at runtime.
 */
- const int sqlite3one = 1;
-#if defined(i386) || defined(__i386__) || defined(_M_IX86) || defined(__x86_64) || defined(__x86_64__)
-# define SQLITE_BIGENDIAN    0
-# define SQLITE_LITTLEENDIAN 1
-# define SQLITE_UTF16NATIVE  SQLITE_UTF16LE
-#else
+const int sqlite3one = 1;
 # define SQLITE_BIGENDIAN    (*(char *)(&sqlite3one)==0)
 # define SQLITE_LITTLEENDIAN (*(char *)(&sqlite3one)==1)
-# define SQLITE_UTF16NATIVE (SQLITE_BIGENDIAN?SQLITE_UTF16BE:SQLITE_UTF16LE)
-#endif
 
 /*
 ** Constants for the largest and smallest possible 64-bit signed integers.
@@ -8181,7 +7990,6 @@ struct sqlite3 {
   void *pCollNeededArg;
   sqlite3_value *pErr;          /* Most recent error message */
   char *zErrMsg;                /* Most recent error message (UTF-8 encoded) */
-  char *zErrMsg16;              /* Most recent error message (UTF-16 encoded) */
   union {
     volatile int isInterrupted; /* True if sqlite3_interrupt has been called */
     double notUsed1;            /* Spacer */
@@ -8290,7 +8098,7 @@ func (db *sqlite3) SetEncoding(e byte) {
 */
 struct FuncDef {
   int16 nArg;            /* Number of arguments.  -1 means unlimited */
-  byte iPrefEnc;         /* Preferred text encoding (SQLITE_UTF8, 16LE, 16BE) */
+  byte iPrefEnc;         /* Preferred text encoding (SQLITE_UTF8) */
   byte flags;            /* Some combination of SQLITE_FUNC_* */
   void *pUserData;     /* User data parameter */
   FuncDef *Next;      /* Next function with same name */
@@ -8424,20 +8232,10 @@ struct Column {
 ** structure. Conceptually, a collating sequence consists of a name and
 ** a comparison routine that defines the order of that sequence.
 **
-** There may two separate implementations of the collation function, one
-** that processes text in UTF-8 encoding (CollSeq.xCmp) and another that
-** processes text encoded in UTF-16 (CollSeq.xCmp16), using the machine
-** native byte order. When a collation sequence is invoked, SQLite selects
-** the version that will require the least expensive encoding
-** translations, if any.
-**
 ** The CollSeq.pUser member variable is an extra parameter that passed in
 ** as the first argument to the UTF-8 comparison function, xCmp.
-** CollSeq.pUser16 is the equivalent for the UTF-16 comparison function,
-** xCmp16.
 **
-** If both CollSeq.xCmp and CollSeq.xCmp16 are NULL, it means that the
-** collating sequence is undefined.  Indices built on an undefined
+** If CollSeq.xCmp is NULL, it means that the collating sequence is undefined.  Indices built on an undefined
 ** collating sequence may not be read or written.
 */
 struct CollSeq {
@@ -9499,11 +9297,7 @@ struct Sqlite3Config {
 # define SQLITE_ENABLE_FTS3
 #endif
 
-/*
-** The ctype.h header is needed for non-ASCII systems.  It is also
-** needed by FTS3 when FTS3 is included in the amalgamation.
-*/
-#if !defined(SQLITE_ASCII) || defined(SQLITE_ENABLE_FTS3)
+#if defined(SQLITE_ENABLE_FTS3)
 # include <ctype.h>
 #endif
 
@@ -9512,7 +9306,6 @@ struct Sqlite3Config {
 ** isspace(), isalnum(), isdigit() and isxdigit(), respectively. The
 ** sqlite versions only work for ASCII characters, regardless of locale.
 */
-#ifdef SQLITE_ASCII
 # define sqlite3Toupper(x)  ((x)&~(sqlite3CtypeMap[(unsigned char)(x)]&0x20))
 # define sqlite3Isspace(x)   (sqlite3CtypeMap[(unsigned char)(x)]&0x01)
 # define sqlite3Isalnum(x)   (sqlite3CtypeMap[(unsigned char)(x)]&0x06)
@@ -9520,15 +9313,6 @@ struct Sqlite3Config {
 # define sqlite3Isdigit(x)   (sqlite3CtypeMap[(unsigned char)(x)]&0x04)
 # define sqlite3Isxdigit(x)  (sqlite3CtypeMap[(unsigned char)(x)]&0x08)
 # define sqlite3Tolower(x)   (sqlite3UpperToLower[(unsigned char)(x)])
-#else
-# define sqlite3Toupper(x)   toupper((unsigned char)(x))
-# define sqlite3Isspace(x)   isspace((unsigned char)(x))
-# define sqlite3Isalnum(x)   isalnum((unsigned char)(x))
-# define sqlite3Isalpha(x)   isalpha((unsigned char)(x))
-# define sqlite3Isdigit(x)   isdigit((unsigned char)(x))
-# define sqlite3Isxdigit(x)  isxdigit((unsigned char)(x))
-# define sqlite3Tolower(x)   tolower((unsigned char)(x))
-#endif
 
 /*
 ** Internal function prototypes

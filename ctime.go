@@ -65,9 +65,6 @@ static const char * const azCompileOpt[] = {
 #ifdef SQLITE_ENABLE_FTS4
   "ENABLE_FTS4",
 #endif
-#ifdef SQLITE_ENABLE_ICU
-  "ENABLE_ICU",
-#endif
 #ifdef SQLITE_ENABLE_IOTRACE
   "ENABLE_IOTRACE",
 #endif
@@ -193,9 +190,7 @@ static const char * const azCompileOpt[] = {
 #ifdef SQLITE_OMIT_TRUNCATE_OPTIMIZATION
   "OMIT_TRUNCATE_OPTIMIZATION",
 #endif
-#ifdef SQLITE_OMIT_UTF16
   "OMIT_UTF16",
-#endif
 #ifdef SQLITE_OMIT_VACUUM
   "OMIT_VACUUM",
 #endif

@@ -672,12 +672,10 @@ func (p *Vdbe) List() (rc int) {
 	assert( p.magic == VDBE_MAGIC_RUN )
 	assert( p.rc == SQLITE_OK || p.rc == SQLITE_BUSY || p.rc == SQLITE_NOMEM )
 
-	//	Even though this opcode does not use dynamic strings for the result, result columns may become dynamic if the user calls sqlite3_column_text16(), causing a translation to UTF-16 encoding.
-	//  releaseMemArray(pMem, 8)
 	p.pResultSet = nil
 
 	if p.rc == SQLITE_NOMEM {
-		//	This happens if a malloc() inside a call to sqlite3_column_text() or sqlite3_column_text16() failed.
+		//	This happens if a malloc() inside a call to sqlite3_column_text() failed.
 		db.mallocFailed = true
 		return SQLITE_ERROR
 	}

@@ -434,7 +434,7 @@ func (pParse *Parse) isSystemTable(Name string) (ok bool)
 
   /* figure out how many UTF-8 characters are in Name */
   zTabName = pTab.Name;
-  nTabName = sqlite3Utf8CharLen(zTabName, -1);
+  nTabName = len(zTabName)
 
   if( db.flags&SQLITE_ForeignKeys ){
     /* If foreign-key support is enabled, rewrite the CREATE TABLE 

@@ -401,7 +401,7 @@ func (pParse *Parse) ExprFunction(pList *ExprList, pToken *Token) (pNew *Expr) {
 //	Wildcards consisting of a single "?" are assigned the next sequential variable number.
 //	Wildcards of the form "?nnn" are assigned the number "nnn".  We make sure "nnn" is not too be to avoid a denial of service attack when the SQL statement comes from an external source.
 //	Wildcards of the form ":aaa", "@aaa", or "$aaa" are assigned the same number as the previous instance of the same wildcard. Or if this is the first instance of the wildcard, the next sequenial variable number is assigned.
- void sqlite3ExprAssignVarNumber(Parse *pParse, Expr *pExpr){
+void sqlite3ExprAssignVarNumber(Parse *pParse, Expr *pExpr){
   sqlite3 *db = pParse.db;
   const char *z;
 

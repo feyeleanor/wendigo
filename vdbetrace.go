@@ -81,16 +81,6 @@ func (p *Vdbe) ExpandSql(zRawSql string) string {
 			} else if parameter.flags & MEM_Real {
 				out = fmt.Sprintf("%!.15g", parameter.r)
 			} else if parameter.flags & MEM_Str {
-#ifndef SQLITE_OMIT_UTF16
-				byte enc = db.Encoding()
-				if enc != SQLITE_UTF8 {
-					utf8 := &Mem{ db: db }
-					utf8.SetStr(parameter.z, enc, SQLITE_STATIC)
-					sqlite3VdbeChangeEncoding(utf8, SQLITE_UTF8)
-					out = fmt.Sprintf("'%.*q'", utf8.n, utf8.z)
-					utf8.Release()
-				} else
-#endif
 				out = fmt.Sprintf("'%.*q'", parameter.n, parameter.z);
 			} else if v, ok := parameter.Value.(Zeroes); ok {
 				out = fmt.Sprintf("zeroblob(%d)", v)

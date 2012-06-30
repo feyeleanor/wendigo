@@ -163,7 +163,7 @@ func (db *sqlite3) InitOne(iDb int, ErrMsg string) (rc int) {
 	//			meta[1]   File format of schema layer.
 	//			meta[2]   Size of the page cache.
 	//			meta[3]   Largest rootpage (auto/incr_vacuum mode)
-	//			meta[4]   Db text encoding. 1:UTF-8 2:UTF-16LE 3:UTF-16BE
+	//			meta[4]   Db text encoding. 1:UTF-8
 	//			meta[5]   User version
 	//			meta[6]   Incremental vacuum mode
 	//			meta[7]   unused
@@ -576,85 +576,3 @@ func int sqlite3_prepare_v2(
   assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
   return rc;
 }
-
-
-#ifndef SQLITE_OMIT_UTF16
-/*
-** Compile the UTF-16 encoded SQL statement zSql into a statement handle.
-*/
-static int sqlite3Prepare16(
-  sqlite3 *db,              /* Database handle. */ 
-  const void *zSql,         /* UTF-16 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  int saveSqlFlag,          /* True to save SQL text into the sqlite3_stmt */
-  sqlite3_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const void **pzTail       /* OUT: End of parsed string */
-){
-  /* This function currently works by first transforming the UTF-16
-  ** encoded string to UTF-8, then invoking sqlite3_prepare(). The
-  ** tricky bit is figuring out the pointer to return in *pzTail.
-  */
-  char *zSql8;
-  const char *zTail8 = 0;
-  int rc = SQLITE_OK;
-
-  assert( ppStmt );
-  *ppStmt = 0;
-  if !db.SafetyCheckOk() {
-    return SQLITE_MISUSE_BKPT;
-  }
-  db.mutex.Lock()
-  zSql8 = sqlite3Utf16to8(db, zSql, nBytes, SQLITE_UTF16NATIVE);
-  if( zSql8 ){
-    rc = sqlite3LockAndPrepare(db, zSql8, -1, saveSqlFlag, 0, ppStmt, &zTail8);
-  }
-
-  if( zTail8 && pzTail ){
-    /* If sqlite3_prepare returns a tail pointer, we calculate the
-    ** equivalent pointer into the UTF-16 string by counting the unicode
-    ** characters between zSql8 and zTail8, and then returning a pointer
-    ** the same number of characters into the UTF-16 string.
-    */
-    int chars_parsed = sqlite3Utf8CharLen(zSql8, (int)(zTail8-zSql8));
-    *pzTail = (byte *)zSql + sqlite3Utf16ByteLen(zSql, chars_parsed);
-  }
-  zSql8 = nil
-  rc = db.ApiExit(rc)
-  db.mutex.Unlock()
-  return rc;
-}
-
-/*
-** Two versions of the official API.  Legacy and new use.  In the legacy
-** version, the original SQL text is not saved in the prepared statement
-** and so if a schema change occurs, SQLITE_SCHEMA is returned by
-** sqlite3_step().  In the new version, the original SQL text is retained
-** and the statement is automatically recompiled if an schema change
-** occurs.
-*/
-func int sqlite3_prepare16(
-  sqlite3 *db,              /* Database handle. */ 
-  const void *zSql,         /* UTF-16 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  sqlite3_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const void **pzTail       /* OUT: End of parsed string */
-){
-  int rc;
-  rc = sqlite3Prepare16(db,zSql,nBytes,0,ppStmt,pzTail);
-  assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
-  return rc;
-}
-func int sqlite3_prepare16_v2(
-  sqlite3 *db,              /* Database handle. */ 
-  const void *zSql,         /* UTF-16 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  sqlite3_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const void **pzTail       /* OUT: End of parsed string */
-){
-  int rc;
-  rc = sqlite3Prepare16(db,zSql,nBytes,1,ppStmt,pzTail);
-  assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
-  return rc;
-}
-
-#endif /* SQLITE_OMIT_UTF16 */
