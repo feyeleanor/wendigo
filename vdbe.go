@@ -143,86 +143,60 @@ static VdbeCursor *allocateCursor(
   return pCx;
 }
 
-/*
-** Try to convert a value into a numeric representation if we can
-** do so without loss of information.  In other words, if the string
-** looks like a number, convert it into a number.  If it does not
-** look like a number, leave it alone.
-*/
-static void applyNumericAffinity(Mem *pRec){
-  if( (pRec.flags & (MEM_Real|))==0 ){
-    double rValue;
-    byte enc = pRec.enc;
-    if pRec.flags & MEM_Str == 0 {
-		return
+//	Try to convert a value into a numeric representation if we can do so without loss of information. In other words, if the string looks like a number, convert it into a number. If it does not look like a number, leave it alone.
+func (pRec *Mem) applyNumericAffinity() {
+	if pRec.flags & MEM_Real == 0 {
+		if pRec.flags & MEM_Str != 0 {
+			if rValue, err := strconv.ParseFloat(pRec.z, 64); err == nil {
+				if v, e := strconv.ParseInt(pRec.z, 0, 64); e == nil {
+					pRec.Store(v)
+				} else {
+					pRec.r = rValue
+					pRec.flags |= MEM_Real
+				}
+			}
+		}
 	}
-    if sqlite3AtoF(pRec.z, &rValue, pRec.n, enc) == 0 {
-		return
-	}
-    if v, e := strconv.ParseInt(pRec.z, 0, 64); e == nil {
-      pRec.Store(v)
-    }else{
-      pRec.r = rValue;
-      pRec.flags |= MEM_Real;
-    }
-  }
 }
 
-/*
-** Processing is determine by the affinity parameter:
-**
-** SQLITE_AFF_INTEGER:
-** SQLITE_AFF_REAL:
-** SQLITE_AFF_NUMERIC:
-**    Try to convert pRec to an integer representation or a 
-**    floating-point representation if an integer representation
-**    is not possible.  Note that the integer representation is
-**    always preferred, even if the affinity is REAL, because
-**    an integer representation is more space efficient on disk.
-**
-** SQLITE_AFF_TEXT:
-**    Convert pRec to a text representation.
-**
-** SQLITE_AFF_NONE:
-**    No-op.  pRec is unchanged.
-*/
+//	Processing is determine by the affinity parameter:
+//		SQLITE_AFF_INTEGER:
+//		SQLITE_AFF_REAL:
+//		SQLITE_AFF_NUMERIC:
+//			Try to convert pRec to an integer representation or a floating-point representation if an integer representation is not possible. Note that the integer representation is always preferred, even if the affinity is REAL, because an integer representation is more space efficient on disk.
+//		SQLITE_AFF_TEXT:
+//			Convert pRec to a text representation.
+//		SQLITE_AFF_NONE:
+//			No-op. pRec is unchanged.
 static void applyAffinity(
   Mem *pRec,          /* The value to apply affinity to */
   char affinity,      /* The affinity to be applied */
   byte enc              /* Use this text encoding */
 ){
-  if( affinity==SQLITE_AFF_TEXT ){
-    /* Only attempt the conversion to TEXT if there is an integer or real
-    ** representation (blob and NULL do not get converted) but no string
-    ** representation.
-    */
-    if( 0==(pRec.flags&MEM_Str) && (pRec.flags&(MEM_Real|)) ){
-      pRec.Stringify(enc)
-    }
-    pRec.flags &= ~(MEM_Real|);
-  }else if( affinity!=SQLITE_AFF_NONE ){
-    assert( affinity==SQLITE_AFF_INTEGER || affinity==SQLITE_AFF_REAL
-             || affinity==SQLITE_AFF_NUMERIC );
-    applyNumericAffinity(pRec);
-    if( pRec.flags & MEM_Real ){
-      pRec.IntegerAffinity()
-    }
-  }
+	if affinity == SQLITE_AFF_TEXT {
+		//	Only attempt the conversion to TEXT if there is an integer or real representation (blob and NULL do not get converted) but no string representation.
+		switch pRec.Value.(type) {
+		case int64, pRec.flags & MEM_Real == 1:
+			pRec.Stringify(enc)
+		}
+		pRec.flags &= ~MEM_Real
+	} else if affinity != SQLITE_AFF_NONE {
+		assert( affinity == SQLITE_AFF_INTEGER || affinity == SQLITE_AFF_REAL || affinity == SQLITE_AFF_NUMERIC )
+		pRec.applyNumericAffinity()
+		if pRec.flags & MEM_Real != 0 {
+			pRec.IntegerAffinity()
+		}
+	}
 }
 
-/*
-** Try to convert the type of a function argument or a result column
-** into a numeric representation.  Use either INTEGER or REAL whichever
-** is appropriate.  But only do the conversion if it is possible without
-** loss of information and return the revised type of the argument.
-*/
-func int sqlite3_value_numeric_type(sqlite3_value *pVal){
-  Mem *pMem = (Mem*)pVal;
-  if( pMem.Type==SQLITE_TEXT ){
-    applyNumericAffinity(pMem);
-    pMem.StoreType()
-  }
-  return pMem.Type;
+//	Try to convert the type of a function argument or a result column into a numeric representation. Use either INTEGER or REAL whichever is appropriate. But only do the conversion if it is possible without loss of information and return the revised type of the argument.
+func (pVal *sqlite3_value) NumericType() int {
+	pMem := (Mem*)(pVal)
+	if pMem.Type == SQLITE_TEXT {
+		pMem.applyNumericAffinity()
+		pMem.StoreType()
+	}
+	return pMem.Type
 }
 
 /*
@@ -1265,9 +1239,9 @@ case OP_Multiply:		fallthrough			//	same as TK_STAR, in1, in2, out3
 case OP_Divide:			fallthrough			//	same as TK_SLASH, in1, in2, out3
 case OP_Remainder:							//	same as TK_REM, in1, in2, out3
 	pIn1 = &aMem[pOp.p1]
-	applyNumericAffinity(pIn1)
+	pIn1.applyNumericAffinity()
 	pIn2 = &aMem[pOp.p2]
-	applyNumericAffinity(pIn2)
+	pIn2.applyNumericAffinity()
 	pOut = &aMem[pOp.p3]
 	u.ag.flags = pIn1.flags | pIn2.flags
 	if u.ag.flags & MEM_Null != 0 {
@@ -1456,8 +1430,8 @@ case OP_ShiftRight:						//	same as TK_RSHIFT, in1, in2, out3
 	pIn2 = &aMem[pOp.p2]
 	pOut = &aMem[pOp.p3]
 	if pIn1.Value != nil && pIn2.Value != nil {				//	(pIn1.flags | pIn2.flags) & MEM_Null == 0 {
-		u.ai.iA = sqlite3VdbeIntValue(pIn2)
-		u.ai.iB = sqlite3VdbeIntValue(pIn1)
+		u.ai.iA = pIn2.IntValue()
+		u.ai.iB = pIn1.IntValue()
 		u.ai.op = pOp.opcode
 		switch {
 		case u.ai.op == OP_BitAnd:
@@ -1763,13 +1737,13 @@ case OP_Or:								//	same as TK_OR, in1, in2, out3
 	if pIn1.Value == nil {
 		u.al.v1 = 2
 	} else {
-		u.al.v1 = sqlite3VdbeIntValue(pIn1) != 0
+		u.al.v1 = pIn1.IntValue() != 0
 	}
 	pIn2 = &aMem[pOp.p2]
 	if pIn2.Value == nil {
 		u.al.v2 = 2
 	} else {
-		u.al.v2 = sqlite3VdbeIntValue(pIn2) != 0
+		u.al.v2 = pIn2.IntValue() != 0
 	}
 	if pOp.opcode == OP_And {
 		and_logic := []byte{ 0, 0, 0, 0, 1, 2, 0, 2, 2 }
@@ -1793,7 +1767,7 @@ case OP_Not:					//	same as TK_NOT, in1, out2
 	if pIn1.Value == nil {
 		pOut.SetNull()
 	} else {
-		if sqlite3VdbeIntValue(pIn1) {
+		if pIn1.IntValue() {
 			pOut.SetInt64(0)
 		} else {
 			pOut.SetInt64(1)
@@ -1808,7 +1782,7 @@ case OP_BitNot:					//	same as TK_BITNOT, in1, out2
 	if pIn1.Value == nil {
 		pOut.SetNull()
 	} else {
-		pOut.SetInt64(~sqlite3VdbeIntValue(pIn1))
+		pOut.SetInt64(~pIn1.IntValue())
 	}
 
 //	Opcode: Once P1 P2 * * *
@@ -2051,14 +2025,15 @@ case OP_Column: {
     ** column and u.an.aOffset[u.an.i] will contain the u.an.offset from the beginning
     ** of the record to the start of the data for the u.an.i-th column
     */
-    for(u.an.i=0; u.an.i<u.an.nField; u.an.i++){
+	count := 0
+    for u.an.i = 0; u.an.i<u.an.nField; u.an.i++){
       if( u.an.zIdx<u.an.zEndHdr ){
         u.an.aOffset[u.an.i] = u.an.offset;
         if( u.an.zIdx[0]<0x80 ){
           u.an.t = u.an.zIdx[0];
           u.an.zIdx++;
         }else{
-          u.an.zIdx += sqlite3GetVarint32(u.an.zIdx, &u.an.t);
+		  u.an.t, u.an.zIdx = u.an.zIdx.GetVarint32()
         }
         u.an.aType[u.an.i] = u.an.t;
         u.an.szField = VdbeSerialTypeLen(u.an.t)
@@ -2913,290 +2888,225 @@ case OP_Close: {
 	p.apCsr[pOp.p1] = nil
 }
 
-/* Opcode: SeekGe P1 P2 P3 P4 *
-**
-** If cursor P1 refers to an SQL table (B-Tree that uses integer keys), 
-** use the value in register P3 as the key.  If cursor P1 refers 
-** to an SQL index, then P3 is the first in an array of P4 registers 
-** that are used as an unpacked index key. 
-**
-** Reposition cursor P1 so that  it points to the smallest entry that 
-** is greater than or equal to the key value. If there are no records 
-** greater than or equal to the key and P2 is not zero, then jump to P2.
-**
-** See also: Found, NotFound, Distinct, SeekLt, SeekGt, SeekLe
-*/
-/* Opcode: SeekGt P1 P2 P3 P4 *
-**
-** If cursor P1 refers to an SQL table (B-Tree that uses integer keys), 
-** use the value in register P3 as a key. If cursor P1 refers 
-** to an SQL index, then P3 is the first in an array of P4 registers 
-** that are used as an unpacked index key. 
-**
-** Reposition cursor P1 so that  it points to the smallest entry that 
-** is greater than the key value. If there are no records greater than 
-** the key and P2 is not zero, then jump to P2.
-**
-** See also: Found, NotFound, Distinct, SeekLt, SeekGe, SeekLe
-*/
-/* Opcode: SeekLt P1 P2 P3 P4 * 
-**
-** If cursor P1 refers to an SQL table (B-Tree that uses integer keys), 
-** use the value in register P3 as a key. If cursor P1 refers 
-** to an SQL index, then P3 is the first in an array of P4 registers 
-** that are used as an unpacked index key. 
-**
-** Reposition cursor P1 so that  it points to the largest entry that 
-** is less than the key value. If there are no records less than 
-** the key and P2 is not zero, then jump to P2.
-**
-** See also: Found, NotFound, Distinct, SeekGt, SeekGe, SeekLe
-*/
-/* Opcode: SeekLe P1 P2 P3 P4 *
-**
-** If cursor P1 refers to an SQL table (B-Tree that uses integer keys), 
-** use the value in register P3 as a key. If cursor P1 refers 
-** to an SQL index, then P3 is the first in an array of P4 registers 
-** that are used as an unpacked index key. 
-**
-** Reposition cursor P1 so that it points to the largest entry that 
-** is less than or equal to the key value. If there are no records 
-** less than or equal to the key and P2 is not zero, then jump to P2.
-**
-** See also: Found, NotFound, Distinct, SeekGt, SeekGe, SeekLt
-*/
-case OP_SeekLt:         /* jump, in3 */
-case OP_SeekLe:         /* jump, in3 */
-case OP_SeekGe:         /* jump, in3 */
-case OP_SeekGt: {       /* jump, in3 */
-  assert( pOp.p1>=0 && pOp.p1<p.nCursor );
-  assert( pOp.p2!=0 );
-  u.bb.pC = p.apCsr[pOp.p1];
-  assert( u.bb.pC!=0 );
-  assert( u.bb.pC.pseudoTableReg==0 );
-  assert( OP_SeekLe == OP_SeekLt+1 );
-  assert( OP_SeekGe == OP_SeekLt+2 );
-  assert( OP_SeekGt == OP_SeekLt+3 );
-  assert( u.bb.pC.isOrdered );
-  if( u.bb.pC.pCursor!=0 ){
-    u.bb.oc = pOp.opcode;
-    u.bb.pC.nullRow = 0;
-    if( u.bb.pC.isTable ){
-      /* The input value in P3 might be of any type: integer, real, string,
-      ** blob, or NULL.  But it needs to be an integer before we can do
-      ** the seek, so covert it. */
-      pIn3 = &aMem[pOp.p3];
-      applyNumericAffinity(pIn3);
-      u.bb.iKey = sqlite3VdbeIntValue(pIn3);
-      u.bb.pC.rowidIsValid = 0;
+//	Opcode: SeekGe P1 P2 P3 P4 *
+//	If cursor P1 refers to an SQL table (B-Tree that uses integer keys), use the value in register P3 as the key. If cursor P1 refers to an SQL index, then P3 is the first in an array of P4 registers that are used as an unpacked index key.
+//	Reposition cursor P1 so that  it points to the smallest entry that is greater than or equal to the key value. If there are no records greater than or equal to the key and P2 is not zero, then jump to P2.
+//	See also: Found, NotFound, Distinct, SeekLt, SeekGt, SeekLe
+//
+//	Opcode: SeekGt P1 P2 P3 P4 *
+//	If cursor P1 refers to an SQL table (B-Tree that uses integer keys), use the value in register P3 as a key. If cursor P1 refers to an SQL index, then P3 is the first in an array of P4 registers that are used as an unpacked index key.
+//	Reposition cursor P1 so that it points to the smallest entry that is greater than the key value. If there are no records greater than the key and P2 is not zero, then jump to P2.
+//	See also: Found, NotFound, Distinct, SeekLt, SeekGe, SeekLe
+//
+//	Opcode: SeekLt P1 P2 P3 P4 * 
+//	If cursor P1 refers to an SQL table (B-Tree that uses integer keys), use the value in register P3 as a key. If cursor P1 refers to an SQL index, then P3 is the first in an array of P4 registers that are used as an unpacked index key.
+//	Reposition cursor P1 so that  it points to the largest entry that is less than the key value. If there are no records less than the key and P2 is not zero, then jump to P2.
+//	See also: Found, NotFound, Distinct, SeekGt, SeekGe, SeekLe
+//
+//	Opcode: SeekLe P1 P2 P3 P4 *
+//	If cursor P1 refers to an SQL table (B-Tree that uses integer keys), use the value in register P3 as a key. If cursor P1 refers to an SQL index, then P3 is the first in an array of P4 registers that are used as an unpacked index key.
+//	Reposition cursor P1 so that it points to the largest entry that is less than or equal to the key value. If there are no records less than or equal to the key and P2 is not zero, then jump to P2.
+//	See also: Found, NotFound, Distinct, SeekGt, SeekGe, SeekLt
+case OP_SeekLt:		fallthrough		//	jump, in3
+case OP_SeekLe:		fallthrough		//	jump, in3
+case OP_SeekGe:		fallthrough		//	jump, in3
+case OP_SeekGt:						//	jump, in3
+	assert( pOp.p1 >= 0 && pOp.p1 < p.nCursor )
+	assert( pOp.p2 != 0 )
+	u.bb.pC = p.apCsr[pOp.p1]
+	assert( u.bb.pC != nil )
+	assert( u.bb.pC.pseudoTableReg == 0 )
+	assert( OP_SeekLe == OP_SeekLt + 1 )
+	assert( OP_SeekGe == OP_SeekLt + 2 )
+	assert( OP_SeekGt == OP_SeekLt + 3 )
+	assert( u.bb.pC.isOrdered )
+	if u.bb.pC.pCursor != nil {
+		u.bb.oc = pOp.opcode
+		u.bb.pC.nullRow = 0
+		if u.bb.pC.isTable {
+			//	The input value in P3 might be of any type: integer, real, string, blob, or NULL.  But it needs to be an integer before we can do the seek, so covert it.
+			pIn3 = &aMem[pOp.p3]
+			pIn3.applyNumericAffinity()
+			u.bb.iKey = pIn3.IntValue()
+			u.bb.pC.rowidIsValid = 0
 
-      /* If the P3 value could not be converted into an integer without
-      ** loss of information, then special processing is required... */
-      if( (pIn3.flags & )==0 ){
-        if( (pIn3.flags & MEM_Real)==0 ){
-          /* If the P3 value cannot be converted into any kind of a number,
-          ** then the seek is not possible, so jump to P2 */
-          pc = pOp.p2 - 1;
-          break;
-        }
-        /* If we reach this point, then the P3 value must be a floating
-        ** point number. */
-        assert( (pIn3.flags & MEM_Real)!=0 );
+			//	If the P3 value could not be converted into an integer without loss of information, then special processing is required...
+			if _, ok := pIn3.Value.(int64); !ok {
+				if pIn3.flags & MEM_Real == 0 {
+					//	If the P3 value cannot be converted into any kind of a number, then the seek is not possible, so jump to P2
+					pc = pOp.p2 - 1
+				}
+				//	If we reach this point, then the P3 value must be a floating point number.
+				assert( pIn3.flags & MEM_Real != 0 )
+				if u.bb.iKey == SMALLEST_INT64 && (pIn3.r < float64(u.bb.iKey) || pIn3.r > 0) {
+					//	The P3 value is too large in magnitude to be expressed as an integer.
+					u.bb.res = 1
+					if pIn3.r < 0 {
+						if u.bb.oc >= OP_SeekGe {
+							assert( u.bb.oc == OP_SeekGe || u.bb.oc == OP_SeekGt )
+							if rc = sqlite3BtreeFirst(u.bb.pC.pCursor, &u.bb.res); rc != SQLITE_OK {
+								goto abort_due_to_error
+							}
+						}
+					} else {
+ 						if u.bb.oc <= OP_SeekLe {
+							assert( u.bb.oc == OP_SeekLt || u.bb.oc == OP_SeekLe )
+							if rc = sqlite3BtreeLast(u.bb.pC.pCursor, &u.bb.res); rc != SQLITE_OK {
+								goto abort_due_to_error
+							}
+						}
+					}
+					if u.bb.res {
+						pc = pOp.p2 - 1
+					}
+					break
+				} else if u.bb.oc == OP_SeekLt || u.bb.oc == OP_SeekGe {
+					//	Use the ceiling() function to convert real.int
+					if pIn3.r > float64(u.bb.iKey) {
+						u.bb.iKey++
+					}
+				} else {
+					//	Use the floor() function to convert real.int
+					assert( u.bb.oc == OP_SeekLe || u.bb.oc == OP_SeekGt )
+					if pIn3.r < float64(u.bb.iKey) {
+						u.bb.iKey--
+					}
+				}
+			}
+			if u.bb.res, rc = u.bb.pC.pCursor.BtreeMovetoUnpacked(0, uint64(u.bb.iKey), false); rc != SQLITE_OK {
+				goto abort_due_to_error
+			}
+			if u.bb.res == 0 {
+				u.bb.pC.rowidIsValid = 1
+				u.bb.pC.lastRowid = u.bb.iKey
+			}
+		} else {
+			u.bb.nField = pOp.p4.i
+			assert( pOp.p4type == P4_INT32 )
+			assert( u.bb.nField > 0 )
+			u.bb.r.pKeyInfo = u.bb.pC.pKeyInfo
+			u.bb.r.nField = uint16(u.bb.nField)
 
-        if( u.bb.iKey==SMALLEST_INT64 && (pIn3.r<(double)u.bb.iKey || pIn3.r>0) ){
-          /* The P3 value is too large in magnitude to be expressed as an
-          ** integer. */
-          u.bb.res = 1;
-          if( pIn3.r<0 ){
-            if( u.bb.oc>=OP_SeekGe ){  assert( u.bb.oc==OP_SeekGe || u.bb.oc==OP_SeekGt );
-              rc = sqlite3BtreeFirst(u.bb.pC.pCursor, &u.bb.res);
-              if( rc!=SQLITE_OK ) goto abort_due_to_error;
-            }
-          }else{
-            if( u.bb.oc<=OP_SeekLe ){  assert( u.bb.oc==OP_SeekLt || u.bb.oc==OP_SeekLe );
-              rc = sqlite3BtreeLast(u.bb.pC.pCursor, &u.bb.res);
-              if( rc!=SQLITE_OK ) goto abort_due_to_error;
-            }
-          }
-          if( u.bb.res ){
-            pc = pOp.p2 - 1;
-          }
-          break;
-        }else if( u.bb.oc==OP_SeekLt || u.bb.oc==OP_SeekGe ){
-          /* Use the ceiling() function to convert real.int */
-          if( pIn3.r > (double)u.bb.iKey ) u.bb.iKey++;
-        }else{
-          /* Use the floor() function to convert real.int */
-          assert( u.bb.oc==OP_SeekLe || u.bb.oc==OP_SeekGt );
-          if( pIn3.r < (double)u.bb.iKey ) u.bb.iKey--;
-        }
-      }
-      rc = sqlite3BtreeMovetoUnpacked(u.bb.pC.pCursor, 0, (uint64)u.bb.iKey, 0, &u.bb.res);
-      if( rc!=SQLITE_OK ){
-        goto abort_due_to_error;
-      }
-      if( u.bb.res==0 ){
-        u.bb.pC.rowidIsValid = 1;
-        u.bb.pC.lastRowid = u.bb.iKey;
-      }
-    }else{
-      u.bb.nField = pOp.p4.i;
-      assert( pOp.p4type==P4_INT32 );
-      assert( u.bb.nField>0 );
-      u.bb.r.pKeyInfo = u.bb.pC.pKeyInfo;
-      u.bb.r.nField = (uint16)u.bb.nField;
+			//	The next line of code computes as follows, only faster:
+			//		if u.bb.oc == OP_SeekGt || u.bb.oc == OP_SeekLe {
+			//			u.bb.r.flags = UNPACKED_INCRKEY
+			//		} else {
+			//			u.bb.r.flags = 0
+			//		}
+			u.bb.r.flags = uint16(UNPACKED_INCRKEY * (1 & (u.bb.oc - OP_SeekLt)))
+			assert( u.bb.oc != OP_SeekGt || u.bb.r.flags == UNPACKED_INCRKEY )
+			assert( u.bb.oc != OP_SeekLe || u.bb.r.flags == UNPACKED_INCRKEY )
+			assert( u.bb.oc != OP_SeekGe || u.bb.r.flags == 0 )
+			assert( u.bb.oc != OP_SeekLt || u.bb.r.flags == 0 )
 
-      /* The next line of code computes as follows, only faster:
-      **   if( u.bb.oc==OP_SeekGt || u.bb.oc==OP_SeekLe ){
-      **     u.bb.r.flags = UNPACKED_INCRKEY;
-      **   }else{
-      **     u.bb.r.flags = 0;
-      **   }
-      */
-      u.bb.r.flags = (uint16)(UNPACKED_INCRKEY * (1 & (u.bb.oc - OP_SeekLt)));
-      assert( u.bb.oc!=OP_SeekGt || u.bb.r.flags==UNPACKED_INCRKEY );
-      assert( u.bb.oc!=OP_SeekLe || u.bb.r.flags==UNPACKED_INCRKEY );
-      assert( u.bb.oc!=OP_SeekGe || u.bb.r.flags==0 );
-      assert( u.bb.oc!=OP_SeekLt || u.bb.r.flags==0 );
+			u.bb.r.aMem = &aMem[pOp.p3]
+			ExpandBlob(u.bb.r.aMem)
+			if u.bb.res, rc = u.bb.pC.pCursor.BtreeMovetoUnpacked(&u.bb.r, 0, false); rc != SQLITE_OK {
+				goto abort_due_to_error
+			}
+			u.bb.pC.rowidIsValid = 0
+		}
+		u.bb.pC.deferredMoveto = 0
+		u.bb.pC.cacheStatus = CACHE_STALE
+		if u.bb.oc >= OP_SeekGe {
+			assert( u.bb.oc == OP_SeekGe || u.bb.oc == OP_SeekGt )
+			if u.bb.res < 0 || (u.bb.res == 0 && u.bb.oc == OP_SeekGt) {
+				if rc = sqlite3BtreeNext(u.bb.pC.pCursor, &u.bb.res); rc != SQLITE_OK {
+					goto abort_due_to_error
+				}
+				u.bb.pC.rowidIsValid = 0
+			} else {
+				u.bb.res = 0
+			}
+		} else {
+			assert( u.bb.oc == OP_SeekLt || u.bb.oc == OP_SeekLe )
+			if u.bb.res > 0 || (u.bb.res == 0 && u.bb.oc == OP_SeekLt) {
+				if rc = sqlite3BtreePrevious(u.bb.pC.pCursor, &u.bb.res); rc != SQLITE_OK {
+					goto abort_due_to_error
+				}
+				u.bb.pC.rowidIsValid = 0
+			} else {
+				//	u.bb.res might be negative because the table is empty. Check to see if this is the case.
+				u.bb.res = sqlite3BtreeEof(u.bb.pC.pCursor);
+			}
+		}
+		assert( pOp.p2 > 0 )
+		if u.bb.res {
+			pc = pOp.p2 - 1
+		}
+	} else {
+		//	This happens when attempting to open the sqlite3_master table for read access returns SQLITE_EMPTY. In this case always take the jump (since there are no records in the table).
+		pc = pOp.p2 - 1
+	}
 
-      u.bb.r.aMem = &aMem[pOp.p3];
-      ExpandBlob(u.bb.r.aMem);
-      rc = sqlite3BtreeMovetoUnpacked(u.bb.pC.pCursor, &u.bb.r, 0, 0, &u.bb.res);
-      if( rc!=SQLITE_OK ){
-        goto abort_due_to_error;
-      }
-      u.bb.pC.rowidIsValid = 0;
-    }
-    u.bb.pC.deferredMoveto = 0;
-    u.bb.pC.cacheStatus = CACHE_STALE;
-    if( u.bb.oc>=OP_SeekGe ){  assert( u.bb.oc==OP_SeekGe || u.bb.oc==OP_SeekGt );
-      if( u.bb.res<0 || (u.bb.res==0 && u.bb.oc==OP_SeekGt) ){
-        rc = sqlite3BtreeNext(u.bb.pC.pCursor, &u.bb.res);
-        if( rc!=SQLITE_OK ) goto abort_due_to_error;
-        u.bb.pC.rowidIsValid = 0;
-      }else{
-        u.bb.res = 0;
-      }
-    }else{
-      assert( u.bb.oc==OP_SeekLt || u.bb.oc==OP_SeekLe );
-      if( u.bb.res>0 || (u.bb.res==0 && u.bb.oc==OP_SeekLt) ){
-        rc = sqlite3BtreePrevious(u.bb.pC.pCursor, &u.bb.res);
-        if( rc!=SQLITE_OK ) goto abort_due_to_error;
-        u.bb.pC.rowidIsValid = 0;
-      }else{
-        /* u.bb.res might be negative because the table is empty.  Check to
-        ** see if this is the case.
-        */
-        u.bb.res = sqlite3BtreeEof(u.bb.pC.pCursor);
-      }
-    }
-    assert( pOp.p2>0 );
-    if( u.bb.res ){
-      pc = pOp.p2 - 1;
-    }
-  }else{
-    /* This happens when attempting to open the sqlite3_master table
-    ** for read access returns SQLITE_EMPTY. In this case always
-    ** take the jump (since there are no records in the table).
-    */
-    pc = pOp.p2 - 1;
-  }
-  break;
-}
-
-/* Opcode: Seek P1 P2 * * *
-**
-** P1 is an open table cursor and P2 is a rowid integer.  Arrange
-** for P1 to move so that it points to the rowid given by P2.
-**
-** This is actually a deferred seek.  Nothing actually happens until
-** the cursor is used to read a record.  That way, if no reads
-** occur, no unnecessary I/O happens.
-*/
-case OP_Seek: {    /* in2 */
-  assert( pOp.p1>=0 && pOp.p1<p.nCursor );
-  u.bc.pC = p.apCsr[pOp.p1];
-  assert( u.bc.pC!=0 );
-  if( u.bc.pC.pCursor!=0 ){
-    assert( u.bc.pC.isTable );
-    u.bc.pC.nullRow = 0;
-    pIn2 = &aMem[pOp.p2];
-    u.bc.pC.movetoTarget = sqlite3VdbeIntValue(pIn2);
-    u.bc.pC.rowidIsValid = 0;
-    u.bc.pC.deferredMoveto = 1;
-  }
-  break;
-}
+//	Opcode: Seek P1 P2 * * *
+//	P1 is an open table cursor and P2 is a rowid integer. Arrange for P1 to move so that it points to the rowid given by P2.
+//	This is actually a deferred seek. Nothing actually happens until the cursor is used to read a record. That way, if no reads occur, no unnecessary I/O happens.
+case OP_Seek:			//	in2
+	assert( pOp.p1 >= 0 && pOp.p1 < p.nCursor )
+	u.bc.pC = p.apCsr[pOp.p1]
+	assert( u.bc.pC != nil )
+	if u.bc.pC.pCursor != nil {
+		assert( u.bc.pC.isTable )
+		u.bc.pC.nullRow = 0
+		pIn2 = &aMem[pOp.p2]
+		u.bc.pC.movetoTarget = pIn2.IntValue()
+		u.bc.pC.rowidIsValid = 0
+		u.bc.pC.deferredMoveto = 1
+	}
   
-
-/* Opcode: Found P1 P2 P3 P4 *
-**
-** If P4==0 then register P3 holds a blob constructed by MakeRecord.  If
-** P4>0 then register P3 is the first of P4 registers that form an unpacked
-** record.
-**
-** Cursor P1 is on an index btree.  If the record identified by P3 and P4
-** is a prefix of any entry in P1 then a jump is made to P2 and
-** P1 is left pointing at the matching entry.
-*/
-/* Opcode: NotFound P1 P2 P3 P4 *
-**
-** If P4==0 then register P3 holds a blob constructed by MakeRecord.  If
-** P4>0 then register P3 is the first of P4 registers that form an unpacked
-** record.
-** 
-** Cursor P1 is on an index btree.  If the record identified by P3 and P4
-** is not the prefix of any entry in P1 then a jump is made to P2.  If P1 
-** does contain an entry whose prefix matches the P3/P4 record then control
-** falls through to the next instruction and P1 is left pointing at the
-** matching entry.
-**
-** See also: Found, NotExists, IsUnique
-*/
-case OP_NotFound:       /* jump, in3 */
-case OP_Found: {        /* jump, in3 */
-  u.bd.alreadyExists = 0;
-  assert( pOp.p1>=0 && pOp.p1<p.nCursor );
-  assert( pOp.p4type==P4_INT32 );
-  u.bd.pC = p.apCsr[pOp.p1];
-  assert( u.bd.pC!=0 );
-  pIn3 = &aMem[pOp.p3];
-  if( u.bd.pC.pCursor!=0 ){
-
-    assert( u.bd.pC.isTable==0 );
-    if( pOp.p4.i>0 ){
-      u.bd.r.pKeyInfo = u.bd.pC.pKeyInfo;
-      u.bd.r.nField = (uint16)pOp.p4.i;
-      u.bd.r.aMem = pIn3;
-      u.bd.r.flags = UNPACKED_PREFIX_MATCH;
-      u.bd.pIdxKey = &u.bd.r;
-    }else{
-      u.bd.pIdxKey = sqlite3VdbeAllocUnpackedRecord(
-          u.bd.pC.pKeyInfo, u.bd.aTempRec, sizeof(u.bd.aTempRec), &u.bd.pFree
-      );
-      if( u.bd.pIdxKey==0 ) goto no_mem;
-      assert( pIn3.flags & MEM_Blob );
-      sqlite3VdbeRecordUnpack(u.bd.pC.pKeyInfo, pIn3.n, pIn3.z, u.bd.pIdxKey);
-      u.bd.pIdxKey.flags |= UNPACKED_PREFIX_MATCH;
-    }
-    rc = sqlite3BtreeMovetoUnpacked(u.bd.pC.pCursor, u.bd.pIdxKey, 0, 0, &u.bd.res);
-    if( pOp.p4.i==0 ){
-      u.bd.pFree = nil
-    }
-    if( rc!=SQLITE_OK ){
-      break;
-    }
-    u.bd.alreadyExists = (u.bd.res==0);
-    u.bd.pC.deferredMoveto = 0;
-    u.bd.pC.cacheStatus = CACHE_STALE;
-  }
-  if( pOp.opcode==OP_Found ){
-    if( u.bd.alreadyExists ) pc = pOp.p2 - 1;
-  }else{
-    if( !u.bd.alreadyExists ) pc = pOp.p2 - 1;
-  }
-  break;
-}
+//	Opcode: Found P1 P2 P3 P4 *
+//	If P4 == 0 then register P3 holds a blob constructed by MakeRecord. If P4 > 0 then register P3 is the first of P4 registers that form an unpacked record.
+//	Cursor P1 is on an index btree. If the record identified by P3 and P4 is a prefix of any entry in P1 then a jump is made to P2 and P1 is left pointing at the matching entry.
+//
+//	Opcode: NotFound P1 P2 P3 P4 *
+//	If P4 == 0 then register P3 holds a blob constructed by MakeRecord. If P4 > 0 then register P3 is the first of P4 registers that form an unpacked record.
+//	Cursor P1 is on an index btree. If the record identified by P3 and P4 is not the prefix of any entry in P1 then a jump is made to P2. If P1 does contain an entry whose prefix matches the P3/P4 record then control falls through to the next instruction and P1 is left pointing at the matching entry.
+//	See also: Found, NotExists, IsUnique
+case OP_NotFound:		fallthrough		//	jump, in3
+case OP_Found:							//	jump, in3
+	u.bd.alreadyExists = 0
+	assert( pOp.p1 >= 0 && pOp.p1 < p.nCursor )
+	assert( pOp.p4type == P4_INT32 )
+	u.bd.pC = p.apCsr[pOp.p1]
+	assert( u.bd.pC != nil )
+	pIn3 = &aMem[pOp.p3]
+	if u.bd.pC.pCursor != nil {
+		assert( u.bd.pC.isTable == 0 )
+		if pOp.p4.i > 0 {
+			u.bd.r.pKeyInfo = u.bd.pC.pKeyInfo
+			u.bd.r.nField = uint16(pOp.p4.i)
+			u.bd.r.aMem = pIn3
+			u.bd.r.flags = UNPACKED_PREFIX_MATCH
+			u.bd.pIdxKey = &u.bd.r
+		} else {
+			u.bd.pIdxKey = sqlite3VdbeAllocUnpackedRecord(u.bd.pC.pKeyInfo, u.bd.aTempRec, sizeof(u.bd.aTempRec), &u.bd.pFree)
+			if u.bd.pIdxKey == nil {
+				goto no_mem
+			}
+			assert( pIn3.flags & MEM_Blob )
+			sqlite3VdbeRecordUnpack(u.bd.pC.pKeyInfo, pIn3.n, pIn3.z, u.bd.pIdxKey)
+			u.bd.pIdxKey.flags |= UNPACKED_PREFIX_MATCH
+		}
+		u.bd.res, rc = u.bd.pC.pCursor.BtreeMovetoUnpacked(u.bd.pIdxKey, 0, false)
+		if pOp.p4.i == 0 {
+			u.bd.pFree = nil
+		}
+		if rc == SQLITE_OK {
+			u.bd.alreadyExists = u.bd.res == 0
+			u.bd.pC.deferredMoveto = 0
+			u.bd.pC.cacheStatus = CACHE_STALE
+		}
+		if pOp.opcode == OP_Found {
+			if u.bd.alreadyExists {
+				pc = pOp.p2 - 1
+			}
+		} else {
+			if !u.bd.alreadyExists {
+				pc = pOp.p2 - 1
+			}
+		}
+	}
 
 //	Opcode: IsUnique P1 P2 P3 P4 *
 //	Cursor P1 is open on an index b-tree - that is to say, a btree which no data and where the key are records generated by OP_MakeRecord with the list field being the integer ROWID of the entry that the index entry refers to.
@@ -3242,7 +3152,7 @@ case OP_IsUnique:				//	jump, in3
 		u.be.R = pIn3.Integer()
 
 		//	Search the B-Tree index. If no conflicting record is found, jump to P2. Otherwise, copy the rowid of the conflicting record to register P3 and fall through to the next instruction.
-		rc = sqlite3BtreeMovetoUnpacked(u.be.pCrsr, &u.be.r, 0, 0, &u.be.pCx.seekResult)
+		u.be.pCx.seekResult, rc = u.be.pCrsr.BtreeMovetoUnpacked(&u.be.r, 0, false)
 		if (u.be.r.flags & UNPACKED_PREFIX_SEARCH) || u.be.r.rowid == u.be.R {
 			pc = pOp.p2 - 1
 		} else {
@@ -3265,7 +3175,7 @@ case OP_NotExists:				//	jump, in3
 	if u.bf.pCrsr = u.bf.pC.pCursor; u.bf.pCrsr != nil {
 		u.bf.res = 0
 		u.bf.iKey = pIn3.Integer()
-		rc = sqlite3BtreeMovetoUnpacked(u.bf.pCrsr, 0, u.bf.iKey, 0, &u.bf.res)
+		u.bf.res, rc = u.bf.pCrsr.BtreeMovetoUnpacked(0, u.bf.iKey, false)
 		u.bf.pC.lastRowid = pIn3.Integer()
 		if u.bf.res == 0 {
 			u.bf.pC.rowidIsValid = 1
@@ -3409,13 +3319,10 @@ case OP_NewRowid: {           /* out2-prerelease */
       u.bg.v &= (MAX_ROWID>>1); /* ensure doesn't go negative */
       u.bg.v++; /* ensure non-zero */
       u.bg.cnt = 0;
-      while(   ((rc = sqlite3BtreeMovetoUnpacked(u.bg.pC.pCursor, 0, (uint64)u.bg.v,
-                                                 0, &u.bg.res))==SQLITE_OK)
-            && (u.bg.res==0)
-            && (++u.bg.cnt<100)){
-        /* collision - try another random rowid */
+      for ((u.bg.res, rc = u.bg.pC.pCursor.BtreeMovetoUnpacked(0, uint64(u.bg.v), false)) == SQLITE_OK) && (u.bg.res == 0) && (++u.bg.cnt < 100) {
+        //	collision - try another random rowid
         rand.Read(&u.bg.v)
-        if( u.bg.cnt<5 ){
+        if u.bg.cnt < 5 {
           /* try "small" random rowids for the initial attempts */
           u.bg.v &= 0xffffff;
         }else{
@@ -3565,8 +3472,7 @@ case OP_SorterCompare:
 	u.bj.pC = p.apCsr[pOp.p1]
 	assert( isSorter(u.bj.pC) )
 	pIn3 = &aMem[pOp.p3]
-	rc = sqlite3VdbeSorterCompare(u.bj.pC, pIn3, &u.bj.res)
-	if u.bj.res {
+	if u.bj.res = u.bj.pC.SorterCompare(pIn3); u.bj.res {
 		pc = pOp.p2 - 1
 	}
 
@@ -3576,7 +3482,7 @@ case OP_SorterData: {
 	pOut = &aMem[pOp.p2]
 	u.bk.pC = p.apCsr[pOp.p1]
 	assert( u.bk.pC.isSorter )
-	rc = sqlite3VdbeSorterRowkey(u.bk.pC, pOut)
+	rc = u.bk.pC.SorterRowkey(pOut)
 
 //	Opcode: RowData P1 P2 * * *
 //	Write into register P2 the complete row data for cursor P1. There is no interpretation of the data. It is just copied onto the P2 register exactly as it is found in the database file.
@@ -3745,70 +3651,47 @@ case OP_Rewind: {			//	jump
 	}
 }
 
-/* Opcode: Next P1 P2 * P4 P5
-**
-** Advance cursor P1 so that it points to the next key/data pair in its
-** table or index.  If there are no more key/value pairs then fall through
-** to the following instruction.  But if the cursor advance was successful,
-** jump immediately to P2.
-**
-** The P1 cursor must be for a real table, not a pseudo-table.
-**
-** P4 is always of type P4_ADVANCE. The function pointer points to
-** sqlite3BtreeNext().
-**
-** If P5 is positive and the jump is taken, then event counter
-** number P5-1 in the prepared statement is incremented.
-**
-** See also: Prev
-*/
-/* Opcode: Prev P1 P2 * * P5
-**
-** Back up cursor P1 so that it points to the previous key/data pair in its
-** table or index.  If there is no previous key/value pairs then fall through
-** to the following instruction.  But if the cursor backup was successful,
-** jump immediately to P2.
-**
-** The P1 cursor must be for a real table, not a pseudo-table.
-**
-** P4 is always of type P4_ADVANCE. The function pointer points to
-** sqlite3BtreePrevious().
-**
-** If P5 is positive and the jump is taken, then event counter
-** number P5-1 in the prepared statement is incremented.
-*/
-case OP_SorterNext:    /* jump */
-
-case OP_Prev:          /* jump */
-case OP_Next: {        /* jump */
-  CHECK_FOR_INTERRUPT;
-  assert( pOp.p1>=0 && pOp.p1<p.nCursor );
-  assert( pOp.p5<=ArraySize(p.aCounter) );
-  u.bq.pC = p.apCsr[pOp.p1];
-  if( u.bq.pC==0 ){
-    break;  /* See ticket #2273 */
-  }
-  assert( u.bq.pC.isSorter==(pOp.opcode==OP_SorterNext) );
-  if( isSorter(u.bq.pC) ){
-    assert( pOp.opcode==OP_SorterNext );
-    rc = sqlite3VdbeSorterNext(db, u.bq.pC, &u.bq.res);
-  }else{
-    u.bq.res = 1;
-    assert( u.bq.pC.deferredMoveto==0 );
-    assert( u.bq.pC.pCursor );
-    assert( pOp.opcode!=OP_Next || pOp.p4.xAdvance==sqlite3BtreeNext );
-    assert( pOp.opcode!=OP_Prev || pOp.p4.xAdvance==sqlite3BtreePrevious );
-    rc = pOp.p4.xAdvance(u.bq.pC.pCursor, &u.bq.res);
-  }
-  u.bq.pC.nullRow = (byte)u.bq.res;
-  u.bq.pC.cacheStatus = CACHE_STALE;
-  if( u.bq.res==0 ){
-    pc = pOp.p2 - 1;
-    if( pOp.p5 ) p.aCounter[pOp.p5-1]++;
-  }
-  u.bq.pC.rowidIsValid = 0;
-  break;
-}
+//	Opcode: Next P1 P2 * P4 P5
+//	Advance cursor P1 so that it points to the next key/data pair in its table or index. If there are no more key/value pairs then fall through to the following instruction. But if the cursor advance was successful, jump immediately to P2.
+//	The P1 cursor must be for a real table, not a pseudo-table.
+//	P4 is always of type P4_ADVANCE. The function pointer points to sqlite3BtreeNext().
+//	If P5 is positive and the jump is taken, then event counter number P5-1 in the prepared statement is incremented.
+//
+//	Opcode: Prev P1 P2 * * P5
+//	Back up cursor P1 so that it points to the previous key/data pair in its table or index. If there is no previous key/value pairs then fall through to the following instruction. But if the cursor backup was successful, jump immediately to P2.
+//	The P1 cursor must be for a real table, not a pseudo-table.
+//	P4 is always of type P4_ADVANCE. The function pointer points to sqlite3BtreePrevious().
+//	If P5 is positive and the jump is taken, then event counter number P5-1 in the prepared statement is incremented.
+case OP_SorterNext:		fallthrough		//	jump
+case OP_Prev:			fallthrough		//	jump
+case OP_Next:							//	jump
+	CHECK_FOR_INTERRUPT
+	assert( pOp.p1 >= 0 && pOp.p1 < p.nCursor )
+	assert( pOp.p5 <= ArraySize(p.aCounter) )
+	if u.bq.pC = p.apCsr[pOp.p1]; u.bq.pC == 0 {
+		break			//	See ticket #2273
+	}
+	assert( u.bq.pC.isSorter == (pOp.opcode == OP_SorterNext) )
+	if isSorter(u.bq.pC) {
+		assert( pOp.opcode == OP_SorterNext )
+		u.bq.res, rc = u.bq.pC.SorterNext()
+	} else {
+		u.bq.res = 1
+		assert( u.bq.pC.deferredMoveto == 0 )
+		assert( u.bq.pC.pCursor )
+		assert( pOp.opcode != OP_Next || pOp.p4.xAdvance == sqlite3BtreeNext )
+		assert( pOp.opcode != OP_Prev || pOp.p4.xAdvance == sqlite3BtreePrevious )
+		rc = pOp.p4.xAdvance(u.bq.pC.pCursor, &u.bq.res)
+	}
+	u.bq.pC.nullRow = byte(u.bq.res)
+	u.bq.pC.cacheStatus = CACHE_STALE
+	if u.bq.res == 0 {
+		pc = pOp.p2 - 1
+		if pOp.p5 {
+			p.aCounter[pOp.p5 - 1]++
+		}
+	}
+	u.bq.pC.rowidIsValid = 0
 
 /* Opcode: IdxInsert P1 P2 P3 * P5
 **
@@ -3852,33 +3735,25 @@ case OP_IdxInsert: {        /* in2 */
   break;
 }
 
-/* Opcode: IdxDelete P1 P2 P3 * *
-**
-** The content of P3 registers starting at register P2 form
-** an unpacked index key. This opcode removes that entry from the 
-** index opened by cursor P1.
-*/
-case OP_IdxDelete: {
-  assert( pOp.p3>0 );
-  assert( pOp.p2>0 && pOp.p2+pOp.p3<=p.nMem+1 );
-  assert( pOp.p1>=0 && pOp.p1<p.nCursor );
-  u.bs.pC = p.apCsr[pOp.p1];
-  assert( u.bs.pC!=0 );
-  u.bs.pCrsr = u.bs.pC.pCursor;
-  if( u.bs.pCrsr!=0 ){
-    u.bs.r.pKeyInfo = u.bs.pC.pKeyInfo;
-    u.bs.r.nField = (uint16)pOp.p3;
-    u.bs.r.flags = 0;
-    u.bs.r.aMem = &aMem[pOp.p2];
-    rc = sqlite3BtreeMovetoUnpacked(u.bs.pCrsr, &u.bs.r, 0, 0, &u.bs.res);
-    if( rc==SQLITE_OK && u.bs.res==0 ){
-      rc = sqlite3BtreeDelete(u.bs.pCrsr);
-    }
-    assert( u.bs.pC.deferredMoveto==0 );
-    u.bs.pC.cacheStatus = CACHE_STALE;
-  }
-  break;
-}
+//	Opcode: IdxDelete P1 P2 P3 * *
+//	The content of P3 registers starting at register P2 form an unpacked index key. This opcode removes that entry from the index opened by cursor P1.
+case OP_IdxDelete:
+	assert( pOp.p3 > 0 )
+	assert( pOp.p2 > 0 && pOp.p2 + pOp.p3 <= p.nMem + 1 )
+	assert( pOp.p1 >= 0 && pOp.p1 < p.nCursor )
+	u.bs.pC = p.apCsr[pOp.p1]
+	assert( u.bs.pC != nil )
+	if u.bs.pCrsr = u.bs.pC.pCursor; u.bs.pCrsr != nil {
+		u.bs.r.pKeyInfo = u.bs.pC.pKeyInfo
+		u.bs.r.nField = uint16(pOp.p3)
+		u.bs.r.flags = 0
+		u.bs.r.aMem = &aMem[pOp.p2]
+		if u.bs.res, rc = u.bs.pCrsr.BtreeMovetoUnpacked(&u.bs.r, 0, false); rc == SQLITE_OK && u.bs.res == 0 {
+			rc = sqlite3BtreeDelete(u.bs.pCrsr)
+		}
+		assert( u.bs.pC.deferredMoveto == 0 )
+		u.bs.pC.cacheStatus = CACHE_STALE
+	}
 
 //	Opcode: IdxRowid P1 P2 * * *
 //	Write into register P2 an integer which is the last entry in the record at the end of the index key pointed to by cursor P1. This integer should be the rowid of the table entry to which this index entry points.
@@ -3899,7 +3774,7 @@ case OP_IdxRowid:				//	out2-prerelease
 			if rc = sqlite3VdbeIdxRowid(db, u.bt.pCrsr, &u.bt.rowid); rc != SQLITE_OK {
 				goto abort_due_to_error
 			}
-			pOut.Store(int64(u.bt.rowid))
+			pOut.Store(u.bt.rowid)
 		}
 	}
 
@@ -3982,7 +3857,7 @@ case OP_Destroy:					//	out2-prerelease
 		assert( u.bv.iCnt == 1 )
 		assert( p.btreeMask & (yDbMask(1) << u.bv.iDb) != 0 )
 		rc = sqlite3BtreeDropTable(db.Databases[u.bv.iDb].pBt, pOp.p1, &u.bv.iMoved)
-		pOut.Store(int64(u.bv.iMoved))
+		pOut.Store(u.bv.iMoved)
 		if rc == SQLITE_OK && u.bv.iMoved != 0 {
 			db.RootPageMoved(u.bv.iDb, u.bv.iMoved, pOp.p1)
 			//	All OP_Destroy operations occur on the same btree
@@ -4138,7 +4013,7 @@ case OP_IntegrityCheck: {
   assert( u.bz.pnErr.flags & (MEM_Str | MEM_Blob) == 0 )
   pIn1 = &aMem[pOp.p1];
   for(u.bz.j=0; u.bz.j<u.bz.nRoot; u.bz.j++){
-    u.bz.aRoot[u.bz.j] = (int)sqlite3VdbeIntValue(&pIn1[u.bz.j]);
+    u.bz.aRoot[u.bz.j] = int(pIn1[u.bz.j].IntValue())
   }
   u.bz.aRoot[u.bz.j] = 0;
   assert( pOp.p5 < len(db.Databases) )

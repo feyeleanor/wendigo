@@ -1133,7 +1133,7 @@ static int rtreeColumn(sqlite3_vtab_cursor *cur, sqlite3_context *ctx, int i){
     nodeGetCoord(pRtree, pCsr.pNode, pCsr.iCell, i-1, &c);
 #ifndef SQLITE_RTREE_INT_ONLY
     if( pRtree.eCoordType==RTREE_COORD_REAL32 ){
-      sqlite3_result_double(ctx, c.f);
+      ctx.SetFloat64(c.f)
     }else
 #endif
     {

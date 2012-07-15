@@ -108,191 +108,10 @@ func CaseInsensitiveMatchN(left, right string, n int) (ok bool) {
 	return CaseInsensitiveMatch(left[:n], right[:n])
 }
 
-/*
-** The string z[] is an text representation of a real number.
-** Convert this string to a double and write it into *pResult.
-**
-** The string z[] is length bytes in length (bytes, not characters) and
-** uses the encoding enc.  The string is not necessarily zero-terminated.
-**
-** Return TRUE if the result is a valid real number (or integer) and FALSE
-** if the string is empty or contains extraneous text.  Valid numbers
-** are in one of these formats:
-**
-**    [+-]digits[E[+-]digits]
-**    [+-]digits.[digits][E[+-]digits]
-**    [+-].digits[E[+-]digits]
-**
-** Leading and trailing whitespace is ignored for the purpose of determining
-** validity.
-**
-** If some prefix of the input string is a valid number, this routine
-** returns FALSE but it still converts the prefix and writes the result
-** into *pResult.
-*/
- int sqlite3AtoF(const char *z, double *pResult, int length, byte enc){
-  int incr = (enc==SQLITE_UTF8?1:2);
-  const char *zEnd = z + length;
-  /* sign * significand * (10 ^ (esign * exponent)) */
-  int sign = 1;    /* sign of significand */
-  int64 s = 0;       /* significand */
-  int d = 0;       /* adjust exponent for shifting decimal point */
-  int esign = 1;   /* sign of exponent */
-  int e = 0;       /* exponent */
-  int eValid = 1;  /* True exponent is either not used or is well-formed */
-  double result;
-  int nDigits = 0;
-
-  *pResult = 0.0;   /* Default return value, in case of an error */
-
-  /* skip leading spaces */
-  while( z<zEnd && sqlite3Isspace(*z) ) z+=incr;
-  if( z>=zEnd ) return 0;
-
-  /* get sign of significand */
-  if( *z=='-' ){
-    sign = -1;
-    z+=incr;
-  }else if( *z=='+' ){
-    z+=incr;
-  }
-
-  /* skip leading zeroes */
-  while( z<zEnd && z[0]=='0' ) z+=incr, nDigits++;
-
-  /* copy max significant digits to significand */
-  while( z<zEnd && sqlite3Isdigit(*z) && s<((LARGEST_INT64-9)/10) ){
-    s = s*10 + (*z - '0');
-    z+=incr, nDigits++;
-  }
-
-  /* skip non-significant significand digits
-  ** (increase exponent by d to shift decimal left) */
-  while( z<zEnd && sqlite3Isdigit(*z) ) z+=incr, nDigits++, d++;
-  if( z>=zEnd ) goto do_atof_calc;
-
-  /* if decimal point is present */
-  if( *z=='.' ){
-    z+=incr;
-    /* copy digits from after decimal to significand
-    ** (decrease exponent by d to shift decimal right) */
-    while( z<zEnd && sqlite3Isdigit(*z) && s<((LARGEST_INT64-9)/10) ){
-      s = s*10 + (*z - '0');
-      z+=incr, nDigits++, d--;
-    }
-    /* skip non-significant digits */
-    while( z<zEnd && sqlite3Isdigit(*z) ) z+=incr, nDigits++;
-  }
-  if( z>=zEnd ) goto do_atof_calc;
-
-  /* if exponent is present */
-  if( *z=='e' || *z=='E' ){
-    z+=incr;
-    eValid = 0;
-    if( z>=zEnd ) goto do_atof_calc;
-    /* get sign of exponent */
-    if( *z=='-' ){
-      esign = -1;
-      z+=incr;
-    }else if( *z=='+' ){
-      z+=incr;
-    }
-    /* copy digits to exponent */
-    while( z<zEnd && sqlite3Isdigit(*z) ){
-      e = e<10000 ? (e*10 + (*z - '0')) : 10000;
-      z+=incr;
-      eValid = 1;
-    }
-  }
-
-  /* skip trailing spaces */
-  if( nDigits && eValid ){
-    while( z<zEnd && sqlite3Isspace(*z) ) z+=incr;
-  }
-
-do_atof_calc:
-  /* adjust exponent by d, and update sign */
-  e = (e*esign) + d;
-  if( e<0 ) {
-    esign = -1;
-    e *= -1;
-  } else {
-    esign = 1;
-  }
-
-  /* if 0 significand */
-  if( !s ) {
-    /* In the IEEE 754 standard, zero is signed.
-    ** Add the sign if we've seen at least one digit */
-    result = (sign<0 && nDigits) ? -(double)0 : (double)0;
-  } else {
-    /* attempt to reduce exponent */
-    if( esign>0 ){
-      while( s<(LARGEST_INT64/10) && e>0 ) e--,s*=10;
-    }else{
-      while( !(s%10) && e>0 ) e--,s/=10;
-    }
-
-    /* adjust the sign of significand */
-    s = sign<0 ? -s : s;
-
-    /* if exponent, scale significand as appropriate
-    ** and store in result. */
-    if( e ){
-      double scale = 1.0;
-      /* attempt to handle extremely small/large numbers better */
-      if( e>307 && e<342 ){
-        while( e%308 ) { scale *= 1.0e+1; e -= 1; }
-        if( esign<0 ){
-          result = s / scale;
-          result /= 1.0e+308;
-        }else{
-          result = s * scale;
-          result *= 1.0e+308;
-        }
-      }else if( e>=342 ){
-        if( esign<0 ){
-          result = 0.0*s;
-        }else{
-          result = 1e308*1e308*s;  /* Infinity */
-        }
-      }else{
-        /* 1.0e+22 is the largest power of 10 than can be 
-        ** represented exactly. */
-        while( e%22 ) { scale *= 1.0e+1; e -= 1; }
-        while( e>0 ) { scale *= 1.0e+22; e -= 22; }
-        if( esign<0 ){
-          result = s / scale;
-        }else{
-          result = s * scale;
-        }
-      }
-    } else {
-      result = (double)s;
-    }
-  }
-
-  /* store the result */
-  *pResult = result;
-
-  /* return true if number and no extra non-whitespace chracters after */
-  return z>=zEnd && nDigits>0 && eValid;
-}
-
-/*
-** Compare the 19-character string zNum against the text representation
-** value 2^63:  9223372036854775808.  Return negative, zero, or positive
-** if zNum is less than, equal to, or greater than the string.
-** Note that zNum must contain exactly 19 characters.
-**
-** Unlike memcmp() this routine is guaranteed to return the difference
-** in the values of the last digit if the only difference is in the
-** last digit.  So, for example,
-**
-**      compare2pow63("9223372036854775800", 1)
-**
-** will return -8.
-*/
+//	Compare the 19-character string zNum against the text representation value 2^63: 9223372036854775808. Return negative, zero, or positive if zNum is less than, equal to, or greater than the string. Note that zNum must contain exactly 19 characters.
+//	Unlike memcmp() this routine is guaranteed to return the difference in the values of the last digit if the only difference is in the last digit. So, for example,
+//			compare2pow63("9223372036854775800", 1)
+//	will return -8.
 static int compare2pow63(const char *zNum, int incr){
   int c = 0;
   int i;
@@ -433,49 +252,37 @@ static int compare2pow63(const char *zNum, int incr){
   return sqlite3PutVarint(p, v);
 }
 
-/*
-** Bitmasks used by sqlite3GetVarint().  These precomputed constants
-** are defined here rather than simply putting the constant expressions
-** inline in order to work around bugs in the RVT compiler.
-**
-** SLOT_2_0     A mask for  (0x7f<<14) | 0x7f
-**
-** SLOT_4_2_0   A mask for  (0x7f<<28) | SLOT_2_0
-*/
-#define SLOT_2_0     0x001fc07f
-#define SLOT_4_2_0   0xf01fc07f
+//	Bitmasks used by sqlite3GetVarint().
+//		SLOT_2_0     A mask for  (0x7f<<14) | 0x7f
+//		SLOT_4_2_0   A mask for  (0x7f<<28) | SLOT_2_0
+const (
+	SLOT_2_0 = 0x001fc07f
+	SLOT_4_2_0 = 0xf01fc07f
+)
 
+//	Read a 64-bit variable-length integer from memory starting at p[0]. Return the number of bytes read. The value is stored in *v.
+func GetVarint(p []byte) (v uint64, count int) {
+byte sqlite3GetVarint(const unsigned char *p, uint64 *v){
+	a, b, s		uint32
 
-/*
-** Read a 64-bit variable-length integer from memory starting at p[0].
-** Return the number of bytes read.  The value is stored in *v.
-*/
- byte sqlite3GetVarint(const unsigned char *p, uint64 *v){
-  uint32 a,b,s;
+	a = uint32(p[0])		//	a: p0 (unmasked)
+	if a & 0x80 == 0 {
+		v = a
+		return 1
+	}
 
-  a = *p;
-  /* a: p0 (unmasked) */
-  if (!(a&0x80))
-  {
-    *v = a;
-    return 1;
-  }
+	b = uint32(b[1])		//	b: p1 (unmasked)
+	if b & 0x80 == 0 {
+		a &= 0x7f
+		a = a << 7
+		a |= b
+		v = a
+		return 2
+	}
 
-  p++;
-  b = *p;
-  /* b: p1 (unmasked) */
-  if (!(b&0x80))
-  {
-    a &= 0x7f;
-    a = a<<7;
-    a |= b;
-    *v = a;
-    return 2;
-  }
-
-  /* Verify that constants are precomputed correctly */
-  assert( SLOT_2_0 == ((0x7f<<14) | (0x7f)) );
-  assert( SLOT_4_2_0 == ((0xfU<<28) | (0x7f<<14) | (0x7f)) );
+	//	Verify that constants are precomputed correctly
+	assert( SLOT_2_0 == ((0x7f << 14) | 0x7f) )
+	assert( SLOT_4_2_0 == ((0xfU << 28) | (0x7f << 14) | 0x7f) )
 
   p++;
   a = a<<14;
@@ -609,135 +416,6 @@ static int compare2pow63(const char *zNum, int incr){
   return 9;
 }
 
-/*
-** Read a 32-bit variable-length integer from memory starting at p[0].
-** Return the number of bytes read.  The value is stored in *v.
-**
-** If the varint stored in p[0] is larger than can fit in a 32-bit unsigned
-** integer, then set *v to 0xffffffff.
-**
-** A MACRO version, getVarint32, is provided which inlines the 
-** single-byte case.  All code should use the MACRO version as 
-** this function assumes the single-byte case has already been handled.
-*/
- byte sqlite3GetVarint32(const unsigned char *p, uint32 *v){
-  uint32 a,b;
-
-  /* The 1-byte case.  Overwhelmingly the most common.  Handled inline
-  ** by the getVarin32() macro */
-  a = *p;
-  /* a: p0 (unmasked) */
-#ifndef getVarint32
-  if (!(a&0x80))
-  {
-    /* Values between 0 and 127 */
-    *v = a;
-    return 1;
-  }
-#endif
-
-  /* The 2-byte case */
-  p++;
-  b = *p;
-  /* b: p1 (unmasked) */
-  if (!(b&0x80))
-  {
-    /* Values between 128 and 16383 */
-    a &= 0x7f;
-    a = a<<7;
-    *v = a | b;
-    return 2;
-  }
-
-  /* The 3-byte case */
-  p++;
-  a = a<<14;
-  a |= *p;
-  /* a: p0<<14 | p2 (unmasked) */
-  if (!(a&0x80))
-  {
-    /* Values between 16384 and 2097151 */
-    a &= (0x7f<<14)|(0x7f);
-    b &= 0x7f;
-    b = b<<7;
-    *v = a | b;
-    return 3;
-  }
-
-  /* A 32-bit varint is used to store size information in btrees.
-  ** Objects are rarely larger than 2MiB limit of a 3-byte varint.
-  ** A 3-byte varint is sufficient, for example, to record the size
-  ** of a 1048569-byte BLOB or string.
-  **
-  ** We only unroll the first 1-, 2-, and 3- byte cases.  The very
-  ** rare larger cases can be handled by the slower 64-bit varint
-  ** routine.
-  */
-#if 1
-  {
-    uint64 v64;
-    byte n;
-
-    p -= 2;
-    n = sqlite3GetVarint(p, &v64);
-    assert( n>3 && n<=9 );
-    if( (v64 & SQLITE_MAX_U32)!=v64 ){
-      *v = 0xffffffff;
-    }else{
-      *v = (uint32)v64;
-    }
-    return n;
-  }
-
-#else
-  /* For following code (kept for historical record only) shows an
-  ** unrolling for the 3- and 4-byte varint cases.  This code is
-  ** slightly faster, but it is also larger and much harder to test.
-  */
-  p++;
-  b = b<<14;
-  b |= *p;
-  /* b: p1<<14 | p3 (unmasked) */
-  if (!(b&0x80))
-  {
-    /* Values between 2097152 and 268435455 */
-    b &= (0x7f<<14)|(0x7f);
-    a &= (0x7f<<14)|(0x7f);
-    a = a<<7;
-    *v = a | b;
-    return 4;
-  }
-
-  p++;
-  a = a<<14;
-  a |= *p;
-  /* a: p0<<28 | p2<<14 | p4 (unmasked) */
-  if (!(a&0x80))
-  {
-    /* Values  between 268435456 and 34359738367 */
-    a &= SLOT_4_2_0;
-    b &= SLOT_4_2_0;
-    b = b<<7;
-    *v = a | b;
-    return 5;
-  }
-
-  /* We can only reach this point when reading a corrupt database
-  ** file.  In that case we are not in any hurry.  Use the (relatively
-  ** slow) general-purpose sqlite3GetVarint() routine to extract the
-  ** value. */
-  {
-    uint64 v64;
-    byte n;
-
-    p -= 4;
-    n = sqlite3GetVarint(p, &v64);
-    assert( n>5 && n<=9 );
-    *v = (uint32)v64;
-    return n;
-  }
-#endif
-}
 
 /*
 ** Return the number of bytes that will be needed to store the given

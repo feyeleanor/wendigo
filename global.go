@@ -122,11 +122,11 @@ struct Sqlite3Config sqlite3Config = {
    0,                         /* mxParserStack */
    false,                     /* sharedCacheEnabled */
    /* All the rest should always be initialized to zero */
-   0,                         /* isInit */
-   0,                         /* inProgress */
-   0,                         /* isMutexInit */
-   0,                         /* isMallocInit */
-   0,                         /* isPCacheInit */
+   false,                         /* isInit */
+   false,                         /* inProgress */
+   false,                         /* isMutexInit */
+   false,                         /* isMallocInit */
+   false,                         /* isPCacheInit */
    0,                         /* pInitMutex */
    0,                         /* nRefInitMutex */
    0,                         /* xLog */

@@ -319,7 +319,7 @@ static int parseDateOrTime(
     return 0;
   }else if CaseInsensitiveMatch(zDate, "now") {
     return setDateTimeToCurrent(context, p);
-  }else if( sqlite3AtoF(zDate, &r, sqlite3Strlen30(zDate), SQLITE_UTF8) ){
+  }else if r, err = strconv.ParseFloat(zDate, 64); err == nil {
     p.iJD = (int64)(r*86400000.0 + 0.5);
     p.validJD = 1;
     return 0;
@@ -563,19 +563,19 @@ static int parseModifier(sqlite3_context *pCtx, const char *zMod, DateTime *p){
       ** weekday N where 0==Sunday, 1==Monday, and so forth.  If the
       ** date is already on the appropriate weekday, this is a no-op.
       */
-      if( strncmp(z, "weekday ", 8)==0
-               && sqlite3AtoF(&z[8], &r, sqlite3Strlen30(&z[8]), SQLITE_UTF8)
-               && (n=(int)r)==r && n>=0 && r<7 ){
-        int64 Z;
-        computeYMD_HMS(p);
-        p.validTZ = 0;
-        p.validJD = 0;
-        computeJD(p);
-        Z = ((p.iJD + 129600000)/86400000) % 7;
-        if( Z>n ) Z -= 7;
-        p.iJD += (n - Z)*86400000;
-        clearYMD_HMS_TZ(p);
-        rc = 0;
+      if strncmp(z, "weekday ", 8) == 0 {
+		  if r, err = strconv.ParseFloat(z[8:], 64); err == nil && (n = int(r)) == r && n >= 0 && r < 7 {
+			int64 Z;
+			computeYMD_HMS(p);
+			p.validTZ = 0;
+			p.validJD = 0;
+			computeJD(p);
+			Z = ((p.iJD + 129600000)/86400000) % 7;
+			if( Z>n ) Z -= 7;
+			p.iJD += (n - Z)*86400000;
+			clearYMD_HMS_TZ(p);
+			rc = 0;
+		  }
       }
       break;
     }
@@ -621,9 +621,9 @@ static int parseModifier(sqlite3_context *pCtx, const char *zMod, DateTime *p){
     case '9': {
       double rRounder;
       for(n=1; z[n] && z[n]!=':' && !sqlite3Isspace(z[n]); n++){}
-      if( !sqlite3AtoF(z, &r, n, SQLITE_UTF8) ){
-        rc = 1;
-        break;
+      if r, err = strconv.ParseFloat(z, 64); err != nil {
+		  rc = 1
+		  break
       }
       if( z[n]==':' ){
         /* A modifier of the form (+|-)HH:MM:SS.FFF adds (or subtracts) the
@@ -757,7 +757,7 @@ static void juliandayFunc(
   DateTime x;
   if( isDate(context, argc, argv, &x)==0 ){
     computeJD(&x);
-    sqlite3_result_double(context, x.iJD/86400000.0);
+    context.SetFloat64(x.iJD / 86400000.0)
   }
 }
 

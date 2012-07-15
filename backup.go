@@ -191,15 +191,15 @@ static int backupOnePage(sqlite3_backup *p, PageNumber iSrcPg, const byte *zSrcD
 		}
 		if pDestPg, rc = pDestPager.Acquire(iDest, false); rc == SQLITE_OK {
 			if rc = sqlite3PagerWrite(pDestPg) == SQLITE_OK {
-				const byte *zIn = &zSrcData[iOff%nSrcPgsz]
-				byte *zDestData = sqlite3PagerGetData(pDestPg)
-				byte *zOut = &zDestData[iOff%nDestPgsz]
+				zIn := zSrcData[iOff % nSrcPgsz]
+				zDestData := pDestPg.GetData()
+				zOut := zDestData[iOff % nDestPgsz]
 
 				//	Copy the data from the source page into the destination page. Then clear the Btree layer MemoryPage.isInit flag. Both this module
 				//	and the pager code use this trick (clearing the first byte of the page 'extra' space to invalidate the Btree layers
 				//	cached parse of the page). MemoryPage.isInit is marked "MUST BE FIRST" for this purpose.
 				memcpy(zOut, zIn, nCopy)
-				(*byte)(sqlite3PagerGetExtra(pDestPg))[0] = 0
+				pDestPg.GetExtra()[0] = 0
 			}
 		}
     	sqlite3PagerUnref(pDestPg)
@@ -293,7 +293,7 @@ func (p *sqlite3_backup) step(pages int) (rc int) {
 				if iSrcPg != PAGER_MJ_PGNO(p.pSrc.pBt) {
 					DbPage *pSrcPg;                             /* Source page object */
 					if pSrcPg, rc = pSrcPager.Acquire(iSrcPg, false); rc == SQLITE_OK {
-						rc = backupOnePage(p, iSrcPg, sqlite3PagerGetData(pSrcPg))
+						rc = backupOnePage(p, iSrcPg, pSrcPg.GetData())
 						sqlite3PagerUnref(pSrcPg)
 					}
 				}
@@ -357,8 +357,7 @@ func (p *sqlite3_backup) step(pages int) (rc int) {
 							PgHdr *pSrcPg = 0
 							const PageNumber iSrcPg = PageNumber((iOff / pgszSrc) + 1)
 							if pSrcPg, rc = pSrcPager.Acquire(iSrcPg, false); rc == SQLITE_OK {
-								byte *zData = sqlite3PagerGetData(pSrcPg)
-								rc = sqlite3OsWrite(pFile, zData, pgszSrc, iOff)
+								rc = sqlite3OsWrite(pFile, pSrcPg.GetData(), pgszSrc, iOff)
 							}
 							sqlite3PagerUnref(pSrcPg)
 						}

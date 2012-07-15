@@ -3681,7 +3681,7 @@ func int sqlite3_create_function_v2(
 ** except that  these routines take a single [protected sqlite3_value] object
 ** pointer instead of a [sqlite3_stmt*] pointer and an integer column number.
 **
-** ^(The sqlite3_value_numeric_type() interface attempts to apply
+** ^(The NumericType() interface attempts to apply
 ** numeric affinity to the value.  This means that an attempt is
 ** made to convert the value to an integer or floating point.  If
 ** such a conversion is possible without loss of information (in other
@@ -3703,7 +3703,6 @@ func int sqlite3_value_int(sqlite3_value*);
 func int64 sqlite3_value_int64(sqlite3_value*);
 func const unsigned char *sqlite3_value_text(sqlite3_value*);
 func int sqlite3_value_type(sqlite3_value*);
-func int sqlite3_value_numeric_type(sqlite3_value*);
 
 /*
 ** CAPI3REF: Obtain Aggregate Function Context
@@ -3853,9 +3852,7 @@ typedef void (*sqlite3_destructor_type)(void*);
 ** the application-defined function to be a BLOB containing all zero
 ** bytes and N bytes in size, where N is the value of the 2nd parameter.
 **
-** ^The sqlite3_result_double() interface sets the result from
-** an application-defined function to be a floating point value specified
-** by its 2nd argument.
+** ^The SetFLoat64() interface sets the result from an application-defined function to be a floating point value specified by its 2nd argument.
 **
 ** ^The sqlite3_result_error() function causes the implemented SQL function to throw an exception.
 ** ^SQLite uses the string pointed to by the
@@ -3935,7 +3932,6 @@ typedef void (*sqlite3_destructor_type)(void*);
 ** the [sqlite3_context] pointer, the results are undefined.
 */
 func void sqlite3_result_blob(sqlite3_context*, const void*, int, void(*)(void*));
-func void sqlite3_result_double(sqlite3_context*, double);
 func void sqlite3_result_error(sqlite3_context*, const char*, int);
 func void sqlite3_result_error_toobig(sqlite3_context*);
 func void sqlite3_result_error_nomem(sqlite3_context*);
@@ -6943,13 +6939,6 @@ typedef struct BtShared BtShared;
  void sqlite3BtreeCursorZero(btree.Cursor*);
 
  int sqlite3BtreeCloseCursor(btree.Cursor*);
- int sqlite3BtreeMovetoUnpacked(
-  btree.Cursor*,
-  UnpackedRecord *pUnKey,
-  int64 intKey,
-  int bias,
-  int *pRes
-);
  int sqlite3BtreeCursorHasMoved(btree.Cursor*, int*);
  int sqlite3BtreeDelete(btree.Cursor*);
  int sqlite3BtreeInsert(btree.Cursor*, const void *pKey, int64 nKey,
@@ -7322,7 +7311,6 @@ type VdbeOpList {
  sqlite3_value *sqlite3VdbeGetValue(Vdbe*, int, byte);
  void sqlite3VdbeSetVarmask(Vdbe*, int);
 
- void sqlite3VdbeRecordUnpack(KeyInfo*,int,const void*,UnpackedRecord*);
  int sqlite3VdbeRecordCompare(int,const void*,UnpackedRecord*);
  UnpackedRecord *sqlite3VdbeAllocUnpackedRecord(KeyInfo *, char *, int, char **);
 #endif
@@ -7441,8 +7429,6 @@ typedef struct PgHdr DbPage;
  void sqlite3PagerDontWrite(DbPage*);
  int sqlite3PagerMovepage(Pager*,DbPage*,PageNumber,int);
  int sqlite3PagerPageRefcount(DbPage*);
- void *sqlite3PagerGetData(DbPage *); 
- void *sqlite3PagerGetExtra(DbPage *); 
 
 /* Functions used to manage pager transactions and savepoints. */
  void sqlite3PagerPagecount(Pager*, int*);
@@ -8470,20 +8456,15 @@ struct KeyInfo {
   CollSeq *aColl[1];  /* Collating sequence for each term of the key */
 };
 
-/*
-** An instance of the following structure holds information about a
-** single index record that has already been parsed out into individual
-** values.
-**
-** A record is an object that contains one or more fields of data.
-** Records are used to store the content of a table row and to store
-** the key of an index.  A blob encoding of a record is created by
-** the OP_MakeRecord opcode of the VDBE and is disassembled by the
-** OP_Column opcode.
-**
-** This structure holds a record that has already been disassembled
-** into its constituent fields.
-*/
+//	An instance of the following structure holds information about a single index record that has already been parsed out into individual values.
+//	A record is an object that contains one or more fields of data. Records are used to store the content of a table row and to store the key of an index. A blob encoding of a record is created by the OP_MakeRecord opcode of the VDBE and is disassembled by the OP_Column opcode.
+//	This structure holds a record that has already been disassembled into its constituent fields.
+type UnpackedRecord struct {
+	*KeyInfo
+	flags		byte
+	rowid		int64
+	Values		[]Mem
+}
 struct UnpackedRecord {
   KeyInfo *pKeyInfo;  /* Collation and sort-order information */
   uint16 nField;         /* Number of entries in apMem[] */
@@ -9247,10 +9228,10 @@ struct Sqlite3Config {
   int PageSize;                       /* Size of each page in pPage[] */
   int nPage;                        /* Number of pages in pPage[] */
   int mxParserStack;                /* maximum depth of the parser stack */
-  sharedCacheEnabled		bool           /* true if shared-cache mode enabled */
+  sharedCacheEnabled		bool		//	true if shared-cache mode enabled
   /* The above might be initialized to non-zero.  The following need to always
   ** initially be zero, however. */
-  int isInit;                       /* True after initialization has finished */
+	isInit					bool		//	True after initialization has finished
   int inProgress;                   /* True while initialization in progress */
   int isMutexInit;                  /* True after mutexes are initialized */
   int isMallocInit;                 /* True after malloc is initialized */
@@ -9374,44 +9355,6 @@ func (p *Parse) ParseTopLevel() *Parse {
 	}
 	return p
 }
-
-
-/*
-** Routines to read and write variable-length integers.  These used to
-** be defined locally, but now we use the varint routines in the util.c
-** file.  Code should use the MACRO forms below, as the Varint32 versions
-** are coded to assume the single byte case is already handled (which 
-** the MACRO form does).
-*/
- int sqlite3PutVarint(unsigned char*, uint64);
- int sqlite3PutVarint32(unsigned char*, uint32);
- byte sqlite3GetVarint(const unsigned char *, uint64 *);
- byte sqlite3GetVarint32(const unsigned char *, uint32 *);
- int sqlite3VarintLen(uint64 v);
-
-/*
-** The header of a record consists of a sequence variable-length integers.
-** These integers are almost always small and are encoded as a single byte.
-** The following macros take advantage this fact to provide a fast encode
-** and decode of the integers in a record header.  It is faster for the common
-** case where the integer is a single byte.  It is a little slower when the
-** integer is two or more bytes.  But overall it is faster.
-**
-** The following expressions are equivalent:
-**
-**     x = sqlite3GetVarint32( A, &B );
-**     x = sqlite3PutVarint32( A, B );
-**
-**     x = getVarint32( A, B );
-**     x = putVarint32( A, B );
-**
-*/
-#define getVarint32(A,B)  (byte)((*(A)<(byte)0x80) ? ((B) = (uint32)*(A)),1 : sqlite3GetVarint32((A), (uint32 *)&(B)))
-#define putVarint32(A,B)  (byte)(((uint32)(B)<(uint32)0x80) ? (*(A) = (unsigned char)(B)),1 : sqlite3PutVarint32((A), (B)))
-#define getVarint    sqlite3GetVarint
-#define putVarint    sqlite3PutVarint
-
-
 
 /*
 ** The interface to the LEMON-generated parser

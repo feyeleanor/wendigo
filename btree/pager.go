@@ -3922,7 +3922,7 @@ static int pagerStress(void *p, PgHdr *pPg){
 **
 ** The nExtra parameter specifies the number of bytes of space allocated
 ** along with each page reference. This space is available to the user
-** via the sqlite3PagerGetExtra() API.
+** via the GetExtra() API.
 **
 ** The flags argument is used to specify properties that affect the
 ** operation of the pager. It should be passed some bitwise combination
@@ -5920,20 +5920,15 @@ func (pPager *Pager) Savepoint(op, iSavepoint int) (rc int) {
   return SQLITE_OK;
 }
 
-/*
-** Return a pointer to the data for the specified page.
-*/
- void *sqlite3PagerGetData(DbPage *pPg){
-  assert( pPg.nRef>0 || pPg.pPager.memDb );
-  return pPg.pData;
+// Return a pointer to the data for the specified page.
+func (pPg *DbPage) GetData() []byte {
+	assert( pPg.nRef > 0 || pPg.pPager.memDb )
+	return pPg.pData
 }
 
-/*
-** Return a pointer to the Pager.nExtra bytes of "extra" space 
-** allocated along with the specified page.
-*/
- void *sqlite3PagerGetExtra(DbPage *pPg){
-  return pPg.pExtra;
+//	Return a pointer to the Pager.nExtra bytes of "extra" space allocated along with the specified page.
+func (pPg *DbPage) GetExtra() []byte {
+	return pPg.pExtra
 }
 
 /*
@@ -5946,13 +5941,11 @@ func (pPager *Pager) Savepoint(op, iSavepoint int) (rc int) {
 ** PAGER_LOCKINGMODE_EXCLUSIVE, indicating the current (possibly updated)
 ** locking-mode.
 */
- int sqlite3PagerLockingMode(Pager *pPager, int eMode){
-  assert( eMode==PAGER_LOCKINGMODE_QUERY
-            || eMode==PAGER_LOCKINGMODE_NORMAL
-            || eMode==PAGER_LOCKINGMODE_EXCLUSIVE );
-  assert( PAGER_LOCKINGMODE_QUERY<0 );
-  assert( PAGER_LOCKINGMODE_NORMAL>=0 && PAGER_LOCKINGMODE_EXCLUSIVE>=0 );
-  assert( pPager.exclusiveMode || 0==pPager.pWal.HeapMemory() );
+int sqlite3PagerLockingMode(Pager *pPager, int eMode){
+  assert( eMode == PAGER_LOCKINGMODE_QUERY || eMode == PAGER_LOCKINGMODE_NORMAL || eMode == PAGER_LOCKINGMODE_EXCLUSIVE )
+  assert( PAGER_LOCKINGMODE_QUERY < 0 )
+  assert( PAGER_LOCKINGMODE_NORMAL >= 0 && PAGER_LOCKINGMODE_EXCLUSIVE >= 0 )
+  assert( pPager.exclusiveMode || pPager.pWal.HeapMemory() == nil )
   if( eMode>=0 && !pPager.tempFile && !pPager.pWal.HeapMemory() ){
     pPager.exclusiveMode = (byte)eMode;
   }

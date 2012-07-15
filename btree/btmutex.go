@@ -263,9 +263,6 @@ func (p *Btree) EnforceIntegrity() {
 	assert(p.pBt.inTransaction >= p.inTrans)
 }
 
-//	Routines to read or write a two- and four-byte big-endian integer values.
-#define get2byte(x)		((x)[0]<<8 | (x)[1])
-#define put2byte(p,v)	((p)[0] = (byte)((v)>>8), (p)[1] = (byte)(v))
 
 //	Obtain the BtShared mutex associated with B-Tree handle p. Also, set BtShared.db to the database handle associated with p and the p.locked boolean to true.
 func (p *Btree) Lock() {

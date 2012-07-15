@@ -74,21 +74,23 @@ func (p *Vdbe) ExpandSql(zRawSql string) string {
 			nextIndex = idx + 1
 			assert( idx > 0 && idx <= p.nVar )
 			parameter := p.aVar[idx - 1]
-			if parameter.Value == nil {
+			switch v := parameter.Value.(type) {
+			case nil:
 				out = append(out, "NULL")
-			} else if v, ok := parameter.Value.(int64) {
+			case int64:
 				out = fmt.Sprintf("%lld", v)
 			} else if parameter.flags & MEM_Real {
 				out = fmt.Sprintf("%!.15g", parameter.r)
 			} else if parameter.flags & MEM_Str {
 				out = fmt.Sprintf("'%.*q'", parameter.n, parameter.z);
-			} else if v, ok := parameter.Value.(Zeroes); ok {
+			case Zeroes:
 				out = fmt.Sprintf("zeroblob(%d)", v)
-			} else {
-				assert( parameter.flags & MEM_Blob )
+			default:
+				//	Anything else is a BLOB
 				out = append(out, "x'")
-				for i := 0; i < len(parameter.z); i++ {
-					out = append(out, fmt.Sprintf("%02x", parameter.z[i] & 0xff))
+				for _, x := range NewBLOB(v) {
+//				for i := 0; i < len(parameter.z); i++ {
+					out = append(out, fmt.Sprintf("%02x", x & 0xff))
 				}
 				out = append(out, "'")
 			}

@@ -198,90 +198,35 @@ func (p *Mem) Release() {
 	p.xDel = nil
 }
 
-/*
-** Convert a 64-bit IEEE double into a 64-bit signed integer.
-** If the double is too large, return 0x8000000000000000.
-**
-** Most systems appear to do this simply by assigning
-** variables and without the extra range tests.  But
-** there are reports that windows throws an expection
-** if the floating point value is out of range. (See ticket #2880.)
-** Because we do not completely understand the problem, we will
-** take the conservative approach and always do range tests
-** before attempting the conversion.
-*/
-static int64 doubleToInt64(double r){
-  /*
-  ** Many compilers we encounter do not define constants for the
-  ** minimum and maximum 64-bit integers, or they define them
-  ** inconsistently.  And many do not understand the "LL" notation.
-  ** So we define our own static constants here using nothing
-  ** larger than a 32-bit integer constant.
-  */
-  static const int64 maxInt = LARGEST_INT64;
-  static const int64 minInt = SMALLEST_INT64;
-
-  if( r<(double)minInt ){
-    return minInt;
-  }else if( r>(double)maxInt ){
-    /* minInt is correct here - not maxInt.  It turns out that assigning
-    ** a very large positive number to an integer results in a very large
-    ** negative integer.  This makes no sense, but it is what x86 hardware
-    ** does so for compatibility we will do the same in software. */
-    return minInt;
-  }else{
-    return (int64)r;
-  }
+//	Return some kind of integer value which is the best we can do at representing the value that *pMem describes as an integer. If pMem is an integer, then the value is exact. If pMem is a floating-point then the value returned is the integer part. If pMem is a string or blob, then we make an attempt to convert it into a integer and return that. If pMem represents an an SQL-NULL value, return 0.
+//	If pMem represents a string value, its encoding might be changed.
+func (pMem *Mem) IntValue() (i int64) {
+	assert( EIGHT_BYTE_ALIGNMENT(pMem) )
+	flags := pMem.flags
+	switch v := pMem.Value.(type); {
+	case int64:
+		i = v
+	case flags & MEM_Real != nil
+		i = int64(pMem.r)
+	case BLOB, flags & MEM_Str != nil:
+		i, _ = strconv.ParseInt(v, 0, 64)
+	}
 }
 
-/*
-** Return some kind of integer value which is the best we can do
-** at representing the value that *pMem describes as an integer.
-** If pMem is an integer, then the value is exact.  If pMem is
-** a floating-point then the value returned is the integer part.
-** If pMem is a string or blob, then we make an attempt to convert
-** it into a integer and return that.  If pMem represents an
-** an SQL-NULL value, return 0.
-**
-** If pMem represents a string value, its encoding might be changed.
-*/
-int64 sqlite3VdbeIntValue(Mem *pMem){
-  int flags;
-  assert( EIGHT_BYTE_ALIGNMENT(pMem) );
-  flags = pMem.flags;
-  if( flags & MEM_Int ){
-    return pMem.Value
-  }else if( flags & MEM_Real ){
-    return doubleToInt64(pMem.r);
-  }else if( flags & (MEM_Str|MEM_Blob) ){
-    int64 value = 0;
-    assert( pMem.z || pMem.n==0 );
-    value, _ = strconv.ParseInt(pMem.z, 0, 64)
-    return value;
-  }else{
-    return 0;
-  }
-}
-
-/*
-** Return the best representation of pMem that we can get into a
-** double.  If pMem is already a double or an integer, return its
-** value.  If it is a string or blob, try to convert it to a double.
-** If it is a NULL, return 0.0.
-*/
- double sqlite3VdbeRealValue(Mem *pMem){
-  assert( EIGHT_BYTE_ALIGNMENT(pMem) );
-  if( pMem.flags & MEM_Real ){
-    return pMem.r;
-  }else if( pMem.flags & MEM_Int ){
-    return float64(pMem.Integer())
-  }else if( pMem.flags & (MEM_Str|MEM_Blob) ){
-    double val = (double)0;
-    sqlite3AtoF(pMem.z, &val, pMem.n, pMem.enc);
-    return val;
-  }else{
-    return (double)0;
-  }
+//	Return the best representation of pMem that we can get into a double. If pMem is already a double or an integer, return its value. If it is a string or blob, try to convert it to a double. If it is a NULL, return 0.0.
+func (pMem *Mem) RealValue() (f float64) {
+double sqlite3VdbeRealValue(Mem *pMem){
+	assert( EIGHT_BYTE_ALIGNMENT(pMem) )
+	flags := pMem.flags
+	switch v := pMem.Value.(type); {
+	case flags & MEM_Real != nil:
+		f = pMem.r
+	case int64:
+		f = float64(v)
+	case BLOB, pMem.flags & MEM_Str != nil:
+		f, _ := strconv.ParseFloat(pMem.z, 64)
+	}
+	return
 }
 
 //	The MEM structure is already a MEM_Real. Try to also make it a MEM_Int if we can.
@@ -290,7 +235,7 @@ func (pMem *Mem) IntegerAffinity() {
 	assert( (pMem.flags & MEM_RowSet) == 0 )
 	assert( EIGHT_BYTE_ALIGNMENT(pMem) )
 
-	pMem.Store(doubleToInt64(pMem.r))
+	pMem.Store(int64(pMem.r))
 
 	//	Only mark the value as an integer if
 	//		(1) the round-trip conversion real.int.real is a no-op, and
@@ -306,7 +251,7 @@ func (pMem *Mem) Integerify() (rc int) {
 	assert( pMem.flags & MEM_RowSet == 0 )
 	assert( EIGHT_BYTE_ALIGNMENT(pMem) )
 
-	pMem.Store(sqlite3VdbeIntValue(pMem))
+	pMem.Store(pMem.IntValue())
 	return
 }
 
@@ -370,19 +315,16 @@ func (pMem *Mem) SetInt64(val int64) {
 	pMem.Type = SQLITE_INTEGER
 }
 
-/*
-** Delete any previous value and set the value stored in *pMem to val,
-** manifest type REAL.
-*/
- void sqlite3VdbeMemSetDouble(Mem *pMem, double val){
-  if math.IsNaN(val) {
-    pMem.SetNull()
-  }else{
-    pMem.Release()
-    pMem.r = val;
-    pMem.flags = MEM_Real;
-    pMem.Type = SQLITE_FLOAT;
-  }
+//	Delete any previous value and set the value stored in *pMem to val, manifest type REAL.
+func (pMem *Mem) SetFloat64(val float64) {
+	if math.IsNaN(val) {
+		pMem.SetNull()
+	} else {
+		pMem.Release()
+		pMem.r = val
+		pMem.flags = MEM_Real
+		pMem.Type = SQLITE_FLOAT
+	}
 }
 
 /*
@@ -604,10 +546,10 @@ int sqlite3MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
 				c2 := new(Mem)
 				sqlite3VdbeMemShallowCopy(c1, pMem1, MEM_Ephem)
 				sqlite3VdbeMemShallowCopy(c2, pMem2, MEM_Ephem)
-				if v1 = sqlite3ValueText(c1, pColl.enc); v1 != 0 {
+				if v1 = c1.ValueText(pColl.enc); v1 != "" {
 					n1 = c1.n
 				}
-				if v2 = sqlite3ValueText(c2, pColl.enc); v2 != 0 {
+				if v2 = c2.ValueText(pColl.enc); v2 != "" {
 					n2 = c2.n
 				}
 				rc = pColl.xCmp(pColl.pUser, n1, v1, n2, v2)
@@ -689,38 +631,6 @@ int sqlite3MemCompare(const Mem *pMem1, const Mem *pMem2, const CollSeq *pColl){
   pMem.n = amt;
 
   return rc;
-}
-
-/* This function is only available internally, it is not part of the
-** external API. It works in a similar way to Mem_text(),
-** except the data returned is in the encoding specified by the second
-** parameter, which must be SQLITE_UTF8.
-*/
- const void *sqlite3ValueText(Mem* pVal, byte enc){
-  if( !pVal ) return 0;
-
-  assert( (pVal.flags & MEM_RowSet)==0 );
-
-  if pVal.Value == nil {
-    return 0;
-  }
-  assert( (MEM_Blob>>3) == MEM_Str );
-  pVal.flags |= (pVal.flags & MEM_Blob)>>3;
-  ExpandBlob(pVal)
-  if( pVal.flags&MEM_Str ){
-    sqlite3VdbeChangeEncoding(pVal, enc)
-    sqlite3VdbeMemNulTerminate(pVal); /* IMP: R-31275-44060 */
-  }else{
-    assert( (pVal.flags&MEM_Blob)==0 );
-    pVal.Stringify(enc)
-    assert( 0==(1&SQLITE_PTR_TO_INT(pVal.z)) );
-  }
-  assert(pVal.enc == enc || pVal.db == 0 || pVal.db.mallocFailed )
-  if pVal.enc == enc {
-    return pVal.z;
-  }else{
-    return 0;
-  }
 }
 
 //	Create a new Mem object.
@@ -857,7 +767,7 @@ func (v *Mem) Free() {
 
 //	Return the number of bytes in the Mem object assuming that it uses the encoding "enc"
 func (p *Mem) ValueBytes(enc byte) (l int) {
-	if (p.flags & MEM_Blob) != 0 || sqlite3ValueText(pVal, enc) != 0 {
+	if v, ok := p.IsBLOB(); ok || p.ValueText(enc) != "" {
 		l = p.ByteLen()
 	}
 	return

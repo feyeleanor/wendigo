@@ -4,7 +4,7 @@ package btree
 //	The parseCellPtr() function fills in this structure based on information extract from the raw disk page.
 type CellInfo struct {
 	Key			int64		//	The key for INTKEY tables, or number of bytes in key
-	Cell		*byte		//	Pointer to the start of cell content
+	Cell		[]byte		//	Pointer to the start of cell content
 	Data		uint32		//	Number of bytes of data
 	Payload		uint32		//	Total amount of payload
 	Header		uint32		//	Size of the cell content header in bytes
@@ -16,20 +16,21 @@ type CellInfo struct {
 //	Parse a cell content block and fill in the CellInfo structure.
 
 func (p *CellInfo) Parse(page *MemoryPage, cell int) {
-	p.ParsePtr(page, findCell(page, cell))
+	p.ParsePtr(page, page.FindCell(cell))
 }
 
-func (p *CellInfo) ParsePtr(page *MemoryPage, cell *byte) {
-	n			uint16			//	Number bytes in cell content header
-	payload		uint32			//	Number of bytes of cell payload
+func (p *CellInfo) ParsePtr(page *MemoryPage, cell Buffer) {
+	var payload		uint32			//	Number of bytes of cell payload
+	var buf			Buffer
 
 	p.Cell = cell
 	assert(page.leaf == 0 || page.leaf == 1)
-	n = page.childPtrSize
+	n := page.childPtrSize
 	assert(n == 4 - 4 * page.leaf)
 	if page.intKey {
 		if page.hasData {
-			n += getVarint32(&cell[n], payload)
+			payload, buf = Buffer(cell[n:]).GetVarint32()
+			n += len(buf) - len(cell[n:])
 		} else {
 			payload = 0
 		}
@@ -37,7 +38,8 @@ func (p *CellInfo) ParsePtr(page *MemoryPage, cell *byte) {
 		p.Data = payload
 	} else {
 		p.Data = 0
-		n += getVarint32(&cell[n], payload)
+		payload, buf = Buffer(cell[n:]).GetVarint32()
+		n += len(buf) - len(cell[n:])
 		p.Key = payload
 	}
 	p.Payload = payload
@@ -55,17 +57,10 @@ func (p *CellInfo) ParsePtr(page *MemoryPage, cell *byte) {
 		//	in between minLocal and maxLocal.
 		//
 		//	Warning:  changing the way overflow payload is distributed in any way will result in an incompatible file format.
-		minLocal	int		//	Minimum amount of payload held locally
-		maxLocal	int		//	Maximum amount of payload held locally
-		surplus		int		//	Overflow payload available for local storage
-
-		minLocal = page.minLocal
-		maxLocal = page.maxLocal
-		surplus = minLocal + (payload - minLocal) % (page.pBt.usableSize - 4)
-		if surplus <= maxLocal {
-			p.Local = uint16(surplus)
+		if surplus_space := minimum_local_payload + (payload - minimum_local_payload) % (page.pBt.usableSize - 4); surplus_payload <= maximum_local_payload {
+			p.Local = uint16(surplus_space)
 		} else {
-			p.Local = uint16(minLocal)
+			p.Local = uint16(minimum_local_payload)
 		}
 		p.Overflow = uint16(p.Local + n)
 		p.Size = p.Overflow + 4

@@ -147,7 +147,7 @@ static void absFunc(sqlite3_context *context, int argc, sqlite3_value **argv){
       */
       double rVal = sqlite3_value_double(argv[0]);
       if( rVal<0 ) rVal = -rVal;
-      sqlite3_result_double(context, rVal);
+      context.SetFloat64(rVal)
       break;
     }
   }
@@ -247,40 +247,37 @@ static void substrFunc(
   }
 }
 
-/*
-** Implementation of the round() function
-*/
-static void roundFunc(sqlite3_context *context, int argc, sqlite3_value **argv){
-  int n = 0;
-  double r;
-  char *zBuf;
-  assert( argc==1 || argc==2 );
-  if( argc==2 ){
-    if( SQLITE_NULL==sqlite3_value_type(argv[1]) ) return;
-    n = sqlite3_value_int(argv[1]);
-    if( n>30 ) n = 30;
-    if( n<0 ) n = 0;
-  }
-  if( sqlite3_value_type(argv[0])==SQLITE_NULL ) return;
-  r = sqlite3_value_double(argv[0]);
-  /* If Y==0 and X will fit in a 64-bit int,
-  ** handle the rounding directly,
-  ** otherwise use printf.
-  */
-  if( n==0 && r>=0 && r<LARGEST_INT64-1 ){
-    r = (double)((sqlite_int64)(r+0.5));
-  }else if( n==0 && r<0 && (-r)<LARGEST_INT64-1 ){
-    r = -(double)((sqlite_int64)((-r)+0.5));
-  }else{
-    zBuf = fmt.Sprintf("%v*%v", n, r)
-    if( zBuf==0 ){
-      sqlite3_result_error_nomem(context);
-      return;
-    }
-    sqlite3AtoF(zBuf, &r, sqlite3Strlen30(zBuf), SQLITE_UTF8);
-    zBuf = nil
-  }
-  sqlite3_result_double(context, r);
+//	Implementation of the round() function
+func roundFunc(context *sqlite3_context, args... *sqlite3_value)
+	assert( len(args) == 1 || len(args) == 2 )
+	n := 0
+	if len(args) == 2 {
+		if sqlite3_value_type(args[1]) == SQLITE_NULL {
+			return
+		}
+		switch n = sqlite3_value_int(args[1]); {
+		case n < 0:
+			n = 0
+		case n > 30:
+			n = 30
+		}
+	}
+	if sqlite3_value_type(args[0]) == SQLITE_NULL {
+		return
+	}
+
+	r := sqlite3_value_double(args[0])
+
+	//	If Y == 0 and X will fit in a 64-bit int, handle the rounding directly, otherwise use printf.
+	switch {
+	case n == 0 && r >= 0 && r < LARGEST_INT64 - 1:
+		r = float64(sqlite_int64(r + 0.5))
+	case n == 0 && r < 0 && -r < LARGEST_INT64 - 1:
+		r = -float64(sqlite_int64(-r + 0.5))
+	default:
+		r, _ := strconv.ParseFloat(fmt.Sprintf("%.*f", n, r), 64)
+	}
+	context.SetFloat64(r)
 }
 
 /*
@@ -1159,7 +1156,7 @@ static void sumStep(sqlite3_context *context, int argc, sqlite3_value **argv){
   int type;
   assert( argc==1 );
   p = sqlite3_aggregate_context(context, sizeof(*p));
-  type = sqlite3_value_numeric_type(argv[0]);
+  type = argv[0].NumericType()
   if( p && type!=SQLITE_NULL ){
     p.cnt++;
     if( type==SQLITE_INTEGER ){
@@ -1175,40 +1172,35 @@ static void sumStep(sqlite3_context *context, int argc, sqlite3_value **argv){
   }
 }
 static void sumFinalize(sqlite3_context *context){
-  SumCtx *p;
-  p = sqlite3_aggregate_context(context, 0);
-  if( p && p.cnt>0 ){
-    if( p.overflow ){
-      sqlite3_result_error(context,"integer overflow",-1);
-    }else if( p.approx ){
-      sqlite3_result_double(context, p.rSum);
-    }else{
-      sqlite3_result_int64(context, p.iSum);
-    }
-  }
+	if p := sqlite3_aggregate_context(context, 0); p != nil && p.cnt > 0 {
+		switch {
+		case p.overflow:
+			sqlite3_result_error(context,"integer overflow",-1);
+		case p.approx:
+			context.SetFloat64(p.rSum)
+		default:
+			sqlite3_result_int64(context, p.iSum)
+		}
+	}
 }
-static void avgFinalize(sqlite3_context *context){
-  SumCtx *p;
-  p = sqlite3_aggregate_context(context, 0);
-  if( p && p.cnt>0 ){
-    sqlite3_result_double(context, p.rSum/(double)p.cnt);
-  }
+static void avgFinalize(sqlite3_context *context) {
+	if p := sqlite3_aggregate_context(context, 0); p != nil && p.cnt > 0 {
+		context.SetFloat64(p.rSum / float64(p.cnt))
+	}
 }
 static void totalFinalize(sqlite3_context *context){
-  SumCtx *p;
-  p = sqlite3_aggregate_context(context, 0);
-  /* (double)0 In case of SQLITE_OMIT_FLOATING_POINT... */
-  sqlite3_result_double(context, p ? p.rSum : (double)0);
+	p := sqlite3_aggregate_context(context, 0)
+	if p != nil {
+		context.SetFloat64(p.rSum)
+	} else {
+		context.SetFloat64(0)
+	}
 }
 
-/*
-** The following structure keeps track of state information for the
-** count() aggregate function.
-*/
-typedef struct CountCtx CountCtx;
-struct CountCtx {
-  int64 n;
-};
+//	The following structure keeps track of state information for the count() aggregate function.
+type CountCtx struct {
+	n	int64
+}
 
 /*
 ** Routines to implement the count() aggregate function.

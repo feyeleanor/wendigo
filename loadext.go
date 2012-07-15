@@ -329,7 +329,6 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_realloc,
   sqlite3_reset,
   sqlite3_result_blob,
-  sqlite3_result_double,
   sqlite3_result_error,
   sqlite3_result_int,
   sqlite3_result_int64,
@@ -352,7 +351,6 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_value_double,
   sqlite3_value_int,
   sqlite3_value_int64,
-  sqlite3_value_numeric_type,
   sqlite3_value_text,
   sqlite3_value_type,
   /*

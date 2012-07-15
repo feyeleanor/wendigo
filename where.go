@@ -2078,9 +2078,8 @@ static int whereKeyStats(
           pParse.SetErrorMsg("no such collation sequence: %v", *pIdx.azColl);
           return SQLITE_ERROR;
         }
-        z = (const byte *)sqlite3ValueText(pVal, pColl.enc);
-        if( !z ){
-          return SQLITE_NOMEM;
+		if z = pVal.ValueText(pColl.enc); z = "" {
+			return SQLITE_NOMEM
         }
         assert( z && pColl && pColl.xCmp );
       }

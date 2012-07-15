@@ -278,7 +278,7 @@ struct WalIndexHdr {
   uint32 iVersion;                   /* Wal-index version */
   uint32 unused;                     /* Unused (padding) field */
   uint32 iChange;                    /* Counter incremented each transaction */
-  byte isInit;                      /* 1 when initialized */
+	isInit			bool			//	when initialized
   byte bigEndCksum;                 /* True if checksums in WAL are big-endian */
   uint16 PageSize;                     /* Database page size in bytes. 1==64K */
   uint32 mxFrame;                    /* Index of last valid frame in the WAL */
@@ -618,7 +618,7 @@ static void walIndexWriteHdr(Wal *pWal){
   const int nCksum = offsetof(WalIndexHdr, aCksum);
 
   assert( pWal.writeLock );
-  pWal.hdr.isInit = 1;
+  pWal.hdr.isInit = true
   pWal.hdr.iVersion = WALINDEX_MAX_VERSION;
   walChecksumBytes(1, (byte*)&pWal.hdr, nCksum, 0, pWal.hdr.aCksum);
   memcpy((void *)&aHdr[1], (void *)&pWal.hdr, sizeof(WalIndexHdr));
@@ -1830,7 +1830,7 @@ static int walIndexTryHdr(Wal *pWal, int *pChanged){
   if( memcmp(&h1, &h2, sizeof(h1))!=0 ){
     return 1;   /* Dirty read */
   }  
-  if( h1.isInit==0 ){
+  if !h1.isInit {
     return 1;   /* Malformed header - probably all zeros */
   }
   walChecksumBytes(1, (byte*)&h1, sizeof(h1)-sizeof(h1.aCksum), 0, aCksum);

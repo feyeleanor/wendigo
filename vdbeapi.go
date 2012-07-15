@@ -115,13 +115,13 @@ func double sqlite3_value_double(sqlite3_value *pVal){
   return sqlite3VdbeRealValue((Mem*)pVal);
 }
 func int sqlite3_value_int(sqlite3_value *pVal){
-  return (int)sqlite3VdbeIntValue((Mem*)pVal);
+  return int(pVal.IntValue())
 }
 func sqlite_int64 sqlite3_value_int64(sqlite3_value *pVal){
-  return sqlite3VdbeIntValue((Mem*)pVal);
+  return pVal.IntValue()
 }
 func const unsigned char *sqlite3_value_text(sqlite3_value *pVal){
-  return (const unsigned char *)sqlite3ValueText(pVal, SQLITE_UTF8);
+  return pVal.ValueText(SQLITE_UTF8)
 }
 func int sqlite3_value_type(sqlite3_value* pVal){
   return pVal.Type;
@@ -155,8 +155,8 @@ func void sqlite3_result_blob(
   assert( n>=0 );
   setResultStrOrError(pCtx, z, n, 0, xDel);
 }
-func void sqlite3_result_double(sqlite3_context *pCtx, double rVal){
-  sqlite3VdbeMemSetDouble(&pCtx.s, rVal);
+func (pCtx *sqlite3_context) SetFloat64(rVal float64) {
+	pCtx.s.SetFloat64(rVal)
 }
 func void sqlite3_result_error(sqlite3_context *pCtx, const char *z, int n){
   pCtx.isError = SQLITE_ERROR;
@@ -644,7 +644,7 @@ func int sqlite3_column_type(sqlite3_stmt *pStmt, int i){
 /* The following function is experimental and subject to change or
 ** removal */
 /*int sqlite3_column_numeric_type(sqlite3_stmt *pStmt, int i){
-**  return sqlite3_value_numeric_type( pStmt.ColumnMem(i) );
+**  return pStmt.ColumnMem(i).NumericType()
 **}
 */
 
@@ -826,7 +826,7 @@ func int sqlite3_bind_double(sqlite3_stmt *pStmt, int i, double rValue){
   int rc;
   p := (Vdbe *)(pStmt)
   if rc = p.Unbind(i); rc == SQLITE_OK {
-    sqlite3VdbeMemSetDouble(&p.aVar[i-1], rValue)
+    p.aVar[i-1].SetFloat64(rValue)
     p.db.mutex.Unlock()
   }
   return rc

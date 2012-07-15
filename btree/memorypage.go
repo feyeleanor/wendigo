@@ -6,10 +6,11 @@ package btree
 //	The pParent field points back to the parent page. This allows us to walk up the BTree from any leaf to the root. Care must be taken to unref() the parent
 //	page pointer when this page is no longer referenced. The pageDestructor() routine handles that chore.
 //
-//	Access to all fields of this structure is controlled by the mutex stored in MemPage.pBt.mutex.
+//	Access to all fields of this structure is controlled by the mutex stored in MemoryPage.pBt.mutex.
 
-struct MemPage {
-	isInit			byte		//	True if previously initialized. MUST BE FIRST!
+type MemoryPage struct {
+//struct MemPage {
+	isInit			bool		//	True if previously initialized. MUST BE FIRST!
 	nOverflow		byte		//	Number of overflow cell bodies in aCell[]
 	intKey			byte		//	True if intkey flag is set
 	leaf			byte		//	True if leaf flag is set
@@ -21,14 +22,17 @@ struct MemPage {
 	minLocal		uint16		//	Copy of BtShared.minLocal or BtShared.minLeaf
 	cellOffset		uint16		//	Index in aData of first cell pointer
 	nFree			uint16		//	Number of free bytes on the page
-	nCell			uint16		//	Number of cells on this page, local and ovfl
+
 	maskPage		uint16		//	Mask for page offset
 	aiOvfl[5]		uint16		//	Insert the i-th overflow cell before the aiOvfl-th non-overflow cell
 	apOvfl[5]		*byte		//	Pointers to the body of overflow cells
 	pBt				*BtShared	//	Pointer to BtShared that this page is part of
 	aData			*byte		//	Pointer to disk image of the page data
 	aDataEnd		*byte		//	One byte past the end of usable data
-	aCellIdx		*byte		//	The cell index area
+
+	nCell			uint16		//	Number of cells on this page, local and ovfl
+	CellIndices		[]byte
+
 	pDbPage			*DbPage		//	Pager page handle
 	pgno			PageNumber	//	Page number for this page
 }
@@ -38,104 +42,80 @@ struct MemPage {
 //	SQLITE_CORRUPT. Note that a return of SQLITE_OK does not guarantee that the page is well-formed. It only shows that
 //	we failed to detect any corruption.
 
-func (p *MemoryPage) Initialize() {
-  assert( p.pBt!=0 );
-  assert( p.pgno==sqlite3PagerPagenumber(p.pDbPage) );
-  assert( p == sqlite3PagerGetExtra(p.pDbPage) );
-  assert( p.aData == sqlite3PagerGetData(p.pDbPage) );
+func (p *MemoryPage) Initialize() (rc int) {
+	assert( p.pBt != nil )
+	assert( p == p.pDbPage.GetExtra() )
+	assert( &(p.aData[0]) == &(p.pDbPage.GetData())[0] )
 
-  if( !p.isInit ){
-    uint16 pc;            /* Address of a freeblock within pPage.aData[] */
-    byte hdr;            /* Offset to beginning of page header */
-    byte *data;          /* Equal to pPage.aData */
-    BtShared *pBt;        /* The main btree structure */
-    int usableSize;    /* Amount of usable space on each page */
-    uint16 cellOffset;    /* Offset from start of page to first cell pointer */
-    int nFree;         /* Number of unused bytes on the page */
-    int top;           /* First byte of the cell content area */
-    int iCellFirst;    /* First allowable cell or freeblock offset */
-    int iCellLast;     /* Last possible cell or freeblock offset */
+	if !p.isInit {
+		pBt := p.pBt
+		hdr := p.hdrOffset
+		data := Buffer(p.aData)
 
-    pBt = p.pBt;
+		if !decodeFlags(p, data[hdr]) {
+			assert( pBt.pageSize >= 512 && pBt.pageSize <= 65536 )
+			p.maskPage = uint16(pBt.pageSize - 1)
+			p.nOverflow = 0
+			usableSize := pBt.usableSize
+			cellOffset := hdr + 12 - 4 * pPage.leaf
+			p.cellOffset = cellOffset
+			p.aDataEnd = &data[usableSize]
+			p.CellIndices = &data[cellOffset]
+			top := data[hdr + 5].ReadCompressedIntNotZero()		//	First byte of the cell content area
+			if p.nCell = data[hdr + 3].ReadUint16(); p.nCell > MX_CELL(pBt) {
+				//	Too many cells for a single page. The page must be corrupt
+				return SQLITE_CORRUPT_BKPT
+			}
 
-    hdr = p.hdrOffset;
-    data = p.aData;
-    if( decodeFlags(p, data[hdr]) ) return SQLITE_CORRUPT_BKPT;
-    assert( pBt.pageSize>=512 && pBt.pageSize<=65536 );
-    p.maskPage = (uint16)(pBt.pageSize - 1);
-    p.nOverflow = 0;
-    usableSize = pBt.usableSize;
-    p.cellOffset = cellOffset = hdr + 12 - 4*pPage.leaf;
-    p.aDataEnd = &data[usableSize];
-    p.aCellIdx = &data[cellOffset];
-    top = get2byteNotZero(&data[hdr+5]);
-    p.nCell = get2byte(&data[hdr+3]);
-    if( p.nCell>MX_CELL(pBt) ){
-      /* To many cells for a single page.  The page must be corrupt */
-      return SQLITE_CORRUPT_BKPT;
-    }
+			//	A malformed database page might cause us to read past the end of page when parsing a cell.  
+			//	The following block of code checks early to see if a cell extends past the end of a page boundary and causes SQLITE_CORRUPT to be returned if it does.
+			iCellFirst := cellOffset + 2 * pPage.nCell		//	First allowable cell or freeblock offset
+			iCellLast := usableSize - 4						//	Last possible cell or freeblock offset
 
-    /* A malformed database page might cause us to read past the end
-    ** of page when parsing a cell.  
-    **
-    ** The following block of code checks early to see if a cell extends
-    ** past the end of a page boundary and causes SQLITE_CORRUPT to be 
-    ** returned if it does.
-    */
-    iCellFirst = cellOffset + 2*pPage.nCell;
-    iCellLast = usableSize - 4;
-    {
-      int i;            /* Index into the cell pointer array */
-      int sz;           /* Size of a cell */
+			if !p.leaf {
+				iCellLast--
+			}
+			for i := 0; i < p.nCell; i++ {
+				pc := data[cellOffset + (i * 2)].ReadUint16()
+				if pc < iCellFirst || pc > iCellLast {
+					return SQLITE_CORRUPT_BKPT
+				}
+				if sz := cellSizePtr(p, &data[pc]); pc + sz > usableSize {
+					return SQLITE_CORRUPT_BKPT
+				}
+			}
+			if !p.leaf {
+				iCellLast++
+			}
 
-      if( !p.leaf ) iCellLast--;
-      for(i=0; i<p.nCell; i++){
-        pc = get2byte(&data[cellOffset+i*2]);
-        if( pc<iCellFirst || pc>iCellLast ){
-          return SQLITE_CORRUPT_BKPT;
-        }
-        sz = cellSizePtr(p, &data[pc]);
-        if( pc+sz>usableSize ){
-          return SQLITE_CORRUPT_BKPT;
-        }
-      }
-      if( !p.leaf ) iCellLast++;
-    }  
+			//	Compute the total free space on the page
+			pc := data[hdr + 1].ReadUint16()
+			nFree := data[hdr + 7] + top
+	    	for pc > 0 {
+				if pc < iCellFirst || pc > iCellLast {
+					//	Start of free block is off the page
+					return SQLITE_CORRUPT_BKPT
+				}
+				next, size := data[pc].ReadUint16(), data[pc + 2].ReadUint16()
+				if (next > 0 && next <= pc + size + 3) || pc + size > usableSize {
+					//	Free blocks must be in ascending order. And the last byte of the free-block must lie on the database page.
+					return SQLITE_CORRUPT_BKPT
+				}
+				nFree = nFree + size
+				pc = next
+			}
 
-    /* Compute the total free space on the page */
-    pc = get2byte(&data[hdr+1]);
-    nFree = data[hdr+7] + top;
-    while( pc>0 ){
-      uint16 next, size;
-      if( pc<iCellFirst || pc>iCellLast ){
-        /* Start of free block is off the page */
-        return SQLITE_CORRUPT_BKPT; 
-      }
-      next = get2byte(&data[pc]);
-      size = get2byte(&data[pc+2]);
-      if( (next>0 && next<=pc+size+3) || pc+size>usableSize ){
-        /* Free blocks must be in ascending order. And the last byte of
-	** the free-block must lie on the database page.  */
-        return SQLITE_CORRUPT_BKPT; 
-      }
-      nFree = nFree + size;
-      pc = next;
-    }
-
-    /* At this point, nFree contains the sum of the offset to the start
-    ** of the cell-content area plus the number of free bytes within
-    ** the cell-content area. If this is greater than the usable-size
-    ** of the page, then the page must be corrupted. This check also
-    ** serves to verify that the offset to the start of the cell-content
-    ** area, according to the page header, lies within the page.
-    */
-    if( nFree>usableSize ){
-      return SQLITE_CORRUPT_BKPT; 
-    }
-    p.nFree = (uint16)(nFree - iCellFirst);
-    p.isInit = 1;
-  }
-  return SQLITE_OK;
+			//	At this point, nFree contains the sum of the offset to the start of the cell-content area plus the number of free bytes within the cell-content area. If this is greater than the usable-size of the page, then the page must be corrupted. This check also serves to verify that the offset to the start of the cell-content area, according to the page header, lies within the page.
+			if nFree > usableSize {
+				return SQLITE_CORRUPT_BKPT
+			}
+			p.nFree = uint16(nFree - iCellFirst)
+			p.isInit = true
+		} else {
+			rc = SQLITE_CORRUPT_BKPT
+		}
+	}
+	return
 }
 
 
@@ -145,25 +125,24 @@ func (p *MemoryPage) Initialize() {
 func (p *MemoryPage) Defragment() int {
 	size	int
 
-  assert( sqlite3PagerIswriteable(pPage.pDbPage) )
-  assert( pPage.pBt!=0 )
-  assert( pPage.pBt.usableSize <= SQLITE_MAX_PAGE_SIZE )
-  assert( pPage.nOverflow==0 )
+	assert( pPage.pBt!=0 )
+	assert( pPage.pBt.usableSize <= SQLITE_MAX_PAGE_SIZE )
+	assert( pPage.nOverflow==0 )
 	temp := sqlite3PagerTempSpace(pPage.pBt.pPager)
-	data := pPage.aData
+	data := Buffer(pPage.aData)
 	header := pPage.hdrOffset
 	cellOffset := pPage.cellOffset
 	nCell := pPage.nCell
-  assert( nCell==get2byte(&data[header  + 3]) )
+	assert( nCell == data[header + 3].ReadUint16() )
 	usableSize := pPage.pBt.usableSize
-	ContentArea:= get2byte(&data[header  + 5])
+	ContentArea:= data[header + 5].ReadUint16()
 	memcpy(&temp[ContentArea], &data[ContentArea], usableSize - ContentArea)
 	ContentArea = usableSize
 	FirstAllowableIndex := cellOffset + 2 * nCell
 	LastAllowableIndex := usableSize - 4
 	for i := 0; i < nCell; i++ {
-		pAddr := &data[cellOffset + i * 2]
-		pc := get2byte(pAddr)
+		pAddr := cellOffset + (i * 2)
+		pc := data[pAddr].ReadUint16()
 		assert( pc >= FirstAllowableIndex && pc <= LastAllowableIndex  )
 		size = cellSizePtr(pPage, &temp[pc])
 		ContentArea -= size
@@ -172,15 +151,14 @@ func (p *MemoryPage) Defragment() int {
 		}
 		assert( ContentArea + size <= usableSize && ContentArea >= FirstAllowableIndex )
 		memcpy(&data[ContentArea], &temp[pc], size)
-		put2byte(pAddr, ContentArea)
+		data[pAddr:].WriteUint16(ContentArea)
 	}
 	assert( ContentArea >= FirstAllowableIndex )
-	put2byte(&data[header + 5], cbrk)
+	data[header + 5:].WriteUint16(cbrk)
 	data[header + 1] = 0
 	data[header + 2] = 0
 	data[header + 7] = 0
 	memset(&data[iCellFirst], 0, ContentArea - FirstAllowableIndex)
-	assert( sqlite3PagerIswriteable(pPage.pDbPage) )
 	if ContentArea - FirstAllowableIndex != pPage.nFree {
 		return SQLITE_CORRUPT_BKPT
 	}
@@ -192,8 +170,27 @@ func (p *MemoryPage) Release() {
 	if p != nil {
 		assert( p.aData )
 		assert( p.pBt )
-		assert( MemoryPage(sqlite3PagerGetExtra(p.pDbPage)) == p )
-		assert( sqlite3PagerGetData(p.pDbPage) == p.aData )
+		assert( MemoryPage(p.pDbPage.GetExtra()) == p )
+		assert( p.pDbPage.GetData() == p.aData )
 		sqlite3PagerUnref(p.pDbPage)
 	}
+}
+
+//	Given a btree page and a cell index (0 means the first cell on the page, 1 means the second cell, and so forth) return a pointer to the cell content.
+//	This routine works only for pages that do not contain overflow cells.
+func (page *MemoryPage) FindCell(cell int) Buffer {
+	return Buffer(page.aData[int(page.maskPage & Buffer(page.CellIndices[2 * cell]).ReadUint16()):])
+}
+
+//	This a more complex version of FindCell() that works for pages that do contain overflow cells.
+func (pPage *MemoryPage) FindOverflowCell(cell int) Buffer {
+	for i := pPage.nOverflow - 1; i >= 0; i-- {
+		switch k := pPage.aiOvfl[i]; {
+		case k == cell:
+			return Buffer(pPage.apOvfl[i])
+		case k < cell:
+			cell--
+		}
+	}
+	return pPage.FindCell(cell)
 }

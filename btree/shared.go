@@ -24,7 +24,7 @@ type BtShared struct {
 	pPager			*Pager				//	The page cache
 	db				*sqlite3			//	Database connection currently using this Btree
 	pCursor			Cursor				//	A list of all open cursors
-	pPage1			*MemPage			//	First page of the database
+	pPage1			*MemoryPage			//	First page of the database
 	openFlags		byte				//	Flags to sqlite3BtreeOpen()
 	autoVacuum		bool				//	True if auto-vacuum is enabled
 	incrVacuum		bool				//	True if incr-vacuum is enabled
@@ -73,7 +73,7 @@ func (pBt *BtShared) GetPage(pgno PageNumber, noContent bool) (ppPage MemoryPage
 	if pDbPage, rc = pBt.pPager.Acquire(pgno, noContent); rc != SQLITE_OK {
 		return
 	}
-	ppPage = btreePageFromDbPage(pDbPage, pgno, pBt)
+	ppPage = pDbPage.BtreePage(pgno, pBt)
 	rc = SQLITE_OK
 	return
 }

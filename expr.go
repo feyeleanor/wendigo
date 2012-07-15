@@ -1294,24 +1294,17 @@ static char *dup8bytes(Vdbe *v, const char *in){
   return out;
 }
 
-/*
-** Generate an instruction that will put the floating point
-** value described by z[0..n-1] into register iMem.
-**
-** The z[] string will probably not be zero-terminated.  But the 
-** z[n] character is guaranteed to be something that does not look
-** like the continuation of the number.
-*/
-static void codeReal(Vdbe *v, const char *z, int negateFlag, int iMem){
-  if( z!=0 ){
-    double value;
-    char *zV;
-    sqlite3AtoF(z, &value, sqlite3Strlen30(z), SQLITE_UTF8);
-    assert( !math.IsNaN(value) ); /* The new AtoF never returns NaN */
-    if( negateFlag ) value = -value;
-    zV = dup8bytes(v, (char*)&value);
-    sqlite3VdbeAddOp4(v, OP_Real, 0, iMem, 0, zV, P4_REAL);
-  }
+//	Generate an instruction that will put the floating point value described by z[0..n-1] into register iMem.
+//	The z[] string will probably not be zero-terminated. But the z[n] character is guaranteed to be something that does not look like the continuation of the number.
+func (v *Vdbe) codeReal(z string, negateFlag bool, iMem int) {
+	if z != "" {
+		value, _ := strconv.ParseFloat(z, 64)
+		assert( !math.IsNaN(value) )				//	The new AtoF never returns NaN
+		if negateFlag {
+			value = -value
+		}
+		sqlite3VdbeAddOp4(v, OP_Real, 0, iMem, 0, dup8bytes(v, &value), P4_REAL)
+	}
 }
 
 
@@ -1338,7 +1331,7 @@ static void codeInteger(Parse *pParse, Expr *pExpr, int negFlag, int iMem){
 			}
 			sqlite3VdbeAddOp4(v, OP_Int64, 0, iMem, 0, dup8bytes(v, (char*)&value), P4_INT64)
 		} else {
-			codeReal(v, z, negFlag, iMem)
+			v.codeReal(z, negFlag, iMem)
 		}
 	}
 }
@@ -1585,7 +1578,7 @@ func (pParse *Parse) ExprCodeMove(from, to, count int) {
     }
     case TK_FLOAT: {
       assert( !pExpr.HasProperty(EP_IntValue) );
-      codeReal(v, pExpr.Token, 0, target);
+      v.codeReal(pExpr.Token, false, target)
       break;
     }
     case TK_STRING: {
@@ -1715,7 +1708,7 @@ func (pParse *Parse) ExprCodeMove(from, to, count int) {
         codeInteger(pParse, pLeft, 1, target);
       }else if( pLeft.op==TK_FLOAT ){
         assert( !pExpr.HasProperty(EP_IntValue) );
-        codeReal(v, pLeft.Token, 1, target);
+        v.codeReal(pLeft.Token, true, target)
       }else{
         regFree1 = r1 = pParse.GetTempReg()
         v.AddOp2(OP_Integer, 0, r1);

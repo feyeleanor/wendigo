@@ -42,12 +42,8 @@ struct PgFreeslot {
 static struct PCacheGlobal {
   Group grp;                    /* The global Group for mode (2) */
 
-  /* Variables related to SQLITE_CONFIG_PAGECACHE settings.  The
-  ** szSlot, nSlot, pStart, pEnd, nReserve, and isInit values are all
-  ** fixed at Initialize() time and do not require mutex protection.
-  ** The nFreeSlot and pFree values do require mutex protection.
-  */
-  int isInit;                    /* True if initialized */
+	//	Variables related to SQLITE_CONFIG_PAGECACHE settings. The szSlot, nSlot, pStart, pEnd, nReserve, and isInit values are all fixed at Initialize() time and do not require mutex protection. The nFreeSlot and pFree values do require mutex protection.
+	isInit	bool				//	True if initialized
   int szSlot;                    /* Size of each free slot */
   int nSlot;                     /* The number of pcache slots */
   int nReserve;                  /* Try to keep nFreeSlot above this */
@@ -73,33 +69,26 @@ static struct PCacheGlobal {
 /******************************************************************************/
 /******** Page Allocation/SQLITE_CONFIG_PCACHE Related Functions **************/
 
-/*
-** This function is called during initialization if a static buffer is 
-** supplied to use for the page-cache by passing the SQLITE_CONFIG_PAGECACHE
-** verb to sqlite3_config(). Parameter pBuf points to an allocation large
-** enough to contain 'n' buffers of 'sz' bytes each.
-**
-** This routine is called from Initialize() and so it is guaranteed
-** to be serialized already.  There is no need for further mutexing.
-*/
- void sqlite3PCacheBufferSetup(void *pBuf, int sz, int n){
-  if( pcache1.isInit ){
-    PgFreeslot *p;
-    sz = ROUNDDOWN(sz, 8)
-    pcache1.szSlot = sz;
-    pcache1.nSlot = pcache1.nFreeSlot = n;
-    pcache1.nReserve = n>90 ? 10 : (n/10 + 1);
-    pcache1.pStart = pBuf;
-    pcache1.pFree = 0;
-    pcache1.bUnderPressure = 0;
-    while( n-- ){
-      p = (PgFreeslot*)pBuf;
-      p.Next = pcache1.pFree;
-      pcache1.pFree = p;
-      pBuf = (void*)&((char*)pBuf)[sz];
-    }
-    pcache1.pEnd = pBuf;
-  }
+//	This function is called during initialization if a static buffer is supplied to use for the page-cache by passing the SQLITE_CONFIG_PAGECACHE verb to sqlite3_config(). Parameter pBuf points to an allocation large enough to contain 'n' buffers of 'sz' bytes each.
+//	This routine is called from Initialize() and so it is guaranteed to be serialized already. There is no need for further mutexing.
+void sqlite3PCacheBufferSetup(void *pBuf, int sz, int n){
+	if pcache1.isInit {
+		PgFreeslot *p;
+		sz = ROUNDDOWN(sz, 8)
+		pcache1.szSlot = sz
+		pcache1.nSlot = pcache1.nFreeSlot = n
+		pcache1.nReserve = n > 90 ? 10 : (n / 10 + 1)
+		pcache1.pStart = pBuf
+		pcache1.pFree = 0
+		pcache1.bUnderPressure = 0
+		while( n-- ){
+			p = (PgFreeslot*)pBuf
+			p.Next = pcache1.pFree
+			pcache1.pFree = p
+			pBuf = (void*)&((char*)pBuf)[sz]
+		}
+		pcache1.pEnd = pBuf
+	}
 }
 
 /*
@@ -346,21 +335,21 @@ static void pcache1TruncateUnsafe(
 
 //	Implementation of the sqlite3_pcache.xInit method.
 static int pcache1Init(void *NotUsed){
-	assert( pcache1.isInit == 0 )
+	assert( !pcache1.isInit )
 	memset(&pcache1, 0, sizeof(pcache1))
 	if sqlite3GlobalConfig.bCoreMutex {
 		pcache1.grp.mutex = sqlite3_mutex_alloc(SQLITE_MUTEX_STATIC_LRU);
 		pcache1.mutex = sqlite3_mutex_alloc(SQLITE_MUTEX_STATIC_PMEM);
 	}
 	pcache1.grp.Pinned = 10
-	pcache1.isInit = 1
+	pcache1.isInit = true
 	return SQLITE_OK
 }
 
 //	Implementation of the sqlite3_pcache.xShutdown method.
 //	Note that the static mutex allocated in xInit does not need to be freed.
 static void pcache1Shutdown(void *NotUsed){
-	assert( pcache1.isInit != 0 )
+	assert( pcache1.isInit )
 	memset(&pcache1, 0, sizeof(pcache1))
 }
 

@@ -109,12 +109,32 @@ struct VdbeFrame {
 
 #define VdbeFrameMem(p) ((Mem *)&((byte *)p)[ROUND(sizeof(VdbeFrame), 8)])
 
-/*
-** A value for VdbeCursor.cacheValid that means the cache is always invalid.
-*/
+//	A value for VdbeCursor.cacheValid that means the cache is always invalid.
 #define CACHE_STALE 0
 
 type Zeroes		int
+
+func (z Zeroes) ByteSlice() []byte {
+	return make([]byte, z, z)
+}
+
+type BLOB		[]byte
+
+func NewBLOB(v interface{}) (b BLOB) {
+	b = BLOB(raw.ByteSlice(v))
+}
+
+func (b *BLOB) Store(v... interface{}) {
+	(*b) = make(BLOB)
+	b.Append(v...)
+}
+
+func (b *BLOB) Append(v... interface{}) {
+	for _, x := range v {
+		(*b) = append(b, BLOB(raw.ByteSlice(x)))
+	}
+}
+
 
 //	Internally, the vdbe manipulates nearly all SQL values as Mem structures. Each Mem struct may cache multiple representations (string, integer etc.) of the same value.
 struct Mem {
@@ -137,7 +157,28 @@ struct Mem {
 }
 
 func (p *Mem) Store(v interface{}) {
-	p.Value = v
+	switch x := v.(type); {
+	case nil, int64:
+		p.Value = v
+	case int8:
+		p.Value = int64(x)
+	case int16:
+		p.Value = int64(x)
+	case int32:
+		p.Value = int64(x)
+	case uint8:
+		p.Value = int64(x)
+	case uint16:
+		p.Value = int64(x)
+	case uint32:
+		p.Value = int64(x)
+	case uint64:
+		p.Value = int64(x)
+	case uintptr:
+		p.Value = int64(x)
+	default:
+		p.Value = NewBLOB(v)
+	}
 }
 
 func (p *Mem) Integer() int {
@@ -154,6 +195,14 @@ func (p *Mem) ByteLen() (l int) {
 		l += int(n)
 	}
 	return
+}
+
+func (pMem *Mem) IsBLOB() bool {
+	switch pMem.Value.(type) {
+	case nil, int64:
+		return false
+	}
+	return true
 }
 
 //	If the given Mem* has a zero-filled tail, turn it into an ordinary blob stored in dynamically allocated space.
@@ -175,6 +224,29 @@ func (pMem *Mem) ExpandBlob() int {
 		} else {
 			rc = SQLITE_NOMEM
 		}
+	}
+	return
+}
+
+//	This function is only available internally, it is not part of the external API. It works in a similar way to Mem_text(), except the data returned is in the encoding specified by the second parameter, which must be SQLITE_UTF8.
+func (pVal *Mem) ValueText(enc byte) (s string) {
+	if pVal != nil {
+		assert( pVal.flags & MEM_RowSet == 0 )
+		if pVal.Value != nil {
+//			pVal.flags |= (pVal.flags & MEM_Blob) >> 3
+			ExpandBlob(pVal)
+			if pVal.flags & MEM_Str != 0 {
+				sqlite3VdbeChangeEncoding(pVal, enc)
+				sqlite3VdbeMemNulTerminate(pVal)				//	IMP: R-31275-44060
+			} else {
+				pVal.Stringify(enc)
+				assert( 0==(1&SQLITE_PTR_TO_INT(pVal.z)) )
+			}
+			assert(pVal.enc == enc || pVal.db == 0 || pVal.db.mallocFailed )
+			if pVal.enc == enc {
+				s = pVal.z
+			}
+	    }
 	}
 	return
 }

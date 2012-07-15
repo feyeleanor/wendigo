@@ -729,7 +729,7 @@ func (p *Vdbe) List() (rc int) {
 		pMem := p.aMem[1]											//	First Mem of result set
 		if p.explain == 1 {
 			pMem.Type = SQLITE_INTEGER
-			pMem.Store(int64(i))									//	Program counter
+			pMem.Store(i)									//	Program counter
 			pMem++
   
 			pMem.flags = MEM_Static | MEM_Str | MEM_Term
@@ -758,15 +758,15 @@ func (p *Vdbe) List() (rc int) {
 			}
 		}
 
-		pMem.Store(int64(pOp.p1))
+		pMem.Store(pOp.p1)
 		pMem.Type = SQLITE_INTEGER
 		pMem++
 
-		pMem.Store(int64(pOp.p2))
+		pMem.Store(pOp.p2)
 		pMem.Type = SQLITE_INTEGER
 		pMem++
 
-		pMem.Store(int64(pOp.p3))
+		pMem.Store(pOp.p3)
 		pMem.Type = SQLITE_INTEGER
 		pMem++
 
@@ -1032,7 +1032,7 @@ func (p *Vdbe) Rewind() {
 //	Close a VDBE cursor and release all the resources that cursor happens to hold.
 func (p *Vdbe) FreeCursor(pCx *VdbeCursor) {
 	if pCx != nil {
-		sqlite3VdbeSorterClose(p.db, pCx)
+		pCx.SorterClose()
 		switch {
 		case pCx.pBt != nil:
 			sqlite3BtreeClose(pCx.pBt)
@@ -1702,7 +1702,7 @@ void sqlite3VdbeDeleteObject(sqlite3 *db, Vdbe *p){
   if( p.deferredMoveto ){
     int res, rc;
     assert( p.isTable );
-    rc = sqlite3BtreeMovetoUnpacked(p.pCursor, 0, p.movetoTarget, 0, &res);
+    res, rc = p.pCursor.BtreeMovetoUnpacked(nil, p.movetoTarget, false)
     if( rc ) return rc;
     p.lastRowid = p.movetoTarget;
     if( res!=0 ) return SQLITE_CORRUPT_BKPT;
@@ -1892,7 +1892,7 @@ func (pMem *Mem) VdbeSerialGet(buf []byte, serial_type uint32) (count uint32) {
 		count = 8
     case 8:		fallthrough		//	Integer 0
     case 9:						//	Integer 1
-		pMem.Store(int64(serial_type - 8))
+		pMem.Store(serial_type - 8)
 	default:
 		count = (serial_type - 12) / 2
 		pMem.z = string(byte[:count])
@@ -1907,20 +1907,11 @@ func (pMem *Mem) VdbeSerialGet(buf []byte, serial_type uint32) (count uint32) {
 	return
 }
 
-/*
-** This routine is used to allocate sufficient space for an UnpackedRecord
-** structure large enough to be used with sqlite3VdbeRecordUnpack() if
-** the first argument is a pointer to KeyInfo structure pKeyInfo.
-**
-** The space is either allocated using sqlite3DbMallocRaw() or from within
-** the unaligned buffer passed via the second and third arguments (presumably
-** stack space). If the former, then *ppFree is set to a pointer. Or, if the 
-** allocation comes from the pSpace/szSpace buffer, *ppFree is set to NULL
-** before returning.
-**
-** If an OOM error occurs, NULL is returned.
-*/
- UnpackedRecord *sqlite3VdbeAllocUnpackedRecord(
+//	This routine is used to allocate sufficient space for an UnpackedRecord structure large enough to be used with sqlite3VdbeRecordUnpack() if the first argument is a pointer to KeyInfo structure pKeyInfo.
+//	The space is either allocated using sqlite3DbMallocRaw() or from within the unaligned buffer passed via the second and third arguments (presumably stack space). If the former, then *ppFree is set to a pointer. Or, if the allocation comes from the pSpace/szSpace buffer, *ppFree is set to NULL before returning.
+//	If an OOM error occurs, NULL is returned.
+func (pKeyInfo *KeyInfo) AllocUnpackedRecord(pSpace []byte, ppFree *[]byte) (p *UnpackedRecord) {
+UnpackedRecord *sqlite3VdbeAllocUnpackedRecord(
   KeyInfo *pKeyInfo,              /* Description of the record */
   char *pSpace,                   /* Unaligned space available */
   int szSpace,                    /* Size of pSpace[] in bytes */
@@ -1951,43 +1942,36 @@ func (pMem *Mem) VdbeSerialGet(buf []byte, serial_type uint32) (count uint32) {
   return p;
 }
 
-/*
-** Given the nKey-byte encoding of a record in pKey[], populate the 
-** UnpackedRecord structure indicated by the fourth argument with the
-** contents of the decoded record.
-*/ 
- void sqlite3VdbeRecordUnpack(
+//	Given the nKey-byte encoding of a record in pKey[], populate the UnpackedRecord structure indicated by the fourth argument with the contents of the decoded record.
+func (pKeyInfo *KeyInfo) RecordUnpack(nKey int, pKey interface{}, p *UnpackedRecord) {
+void sqlite3VdbeRecordUnpack(
   KeyInfo *pKeyInfo,     /* Information about the record format */
   int nKey,              /* Size of the binary record */
   const void *pKey,      /* The binary record */
   UnpackedRecord *p      /* Populate this structure before returning. */
 ){
   const unsigned char *aKey = (const unsigned char *)pKey;
-  int d; 
-  uint32 idx;                        /* Offset in aKey[] to read from */
-  uint16 u;                          /* Unsigned loop counter */
-  uint32 szHdr;
-  Mem *pMem = p.aMem;
 
-  p.flags = 0;
-  assert( EIGHT_BYTE_ALIGNMENT(pMem) );
-  idx = getVarint32(aKey, szHdr);
-  d = szHdr;
-  u = 0;
-  while( idx<szHdr && u<p.nField && d<=nKey ){
-    uint32 serial_type;
-
-    idx += getVarint32(&aKey[idx], serial_type);
-    pMem.enc = pKeyInfo.enc;
-    pMem.db = pKeyInfo.db;
-    /* pMem.flags = 0; // VdbeSerialGet() will set this for us */
-    pMem.zMalloc = 0;
-    d += pMem.VdbeSerialGet(&aKey[d:], serial_type)
-    pMem++;
-    u++;
-  }
-  assert( u<=pKeyInfo.nField + 1 );
-  p.nField = u;
+	pMem := p.aMem
+	p.flags := 0
+	assert( EIGHT_BYTE_ALIGNMENT(pMem) )
+	var szHdr	uint32
+	idx := getVarint32(aKey, szHdr)
+	d := szHdr
+	u := 0
+	for ; idx < szHdr && u < p.nField && d <= nKey; {
+		serial_type	uint32
+		idx += getVarint32(&aKey[idx], serial_type)
+		pMem.enc = pKeyInfo.enc
+		pMem.db = pKeyInfo.db
+		//	pMem.flags = 0; // VdbeSerialGet() will set this for us */
+		pMem.zMalloc = ""
+		d += pMem.VdbeSerialGet(&aKey[d:], serial_type)
+		pMem++
+		u++
+	}
+	assert( u <= pKeyInfo.nField + 1 )
+	p.nField = u
 }
 
 /*
@@ -2090,67 +2074,50 @@ func (pMem *Mem) VdbeSerialGet(buf []byte, serial_type uint32) (count uint32) {
 }
  
 
-/*
-** pCur points at an index entry created using the OP_MakeRecord opcode.
-** Read the rowid (the last field in the record) and store it in *rowid.
-** Return SQLITE_OK if everything works, or an error code otherwise.
-**
-** pCur might be pointing to text obtained from a corrupt database file.
-** So the content cannot be trusted.  Do appropriate checks on the content.
-*/
- int sqlite3VdbeIdxRowid(sqlite3 *db, btree.Cursor *pCur, int64 *rowid){
-  int64 nCellKey = 0;
-  int rc;
-  uint32 szHdr;        /* Size of the header */
-  uint32 typeRowid;    /* Serial type of the rowid */
-  uint32 lenRowid;     /* Size of the rowid */
-  Mem m, v;
+//	pCur points at an index entry created using the OP_MakeRecord opcode. Read the rowid (the last field in the record) and store it in *rowid. Return SQLITE_OK if everything works, or an error code otherwise.
+//	pCur might be pointing to text obtained from a corrupt database file. So the content cannot be trusted. Do appropriate checks on the content.
+int sqlite3VdbeIdxRowid(sqlite3 *db, btree.Cursor *pCur, int64 *rowid) {
+	int64 nCellKey = 0;
+	int rc;
+	uint32 szHdr;        /* Size of the header */
+	uint32 typeRowid;    /* Serial type of the rowid */
+	uint32 lenRowid;     /* Size of the rowid */
+	Mem v
 
-  /* Get the size of the index entry.  Only indices entries of less
-  ** than 2GiB are support - anything large must be database corruption.
-  ** Any corruption is detected in sqlite3BtreeParseCellPtr(), though, so
-  ** this code can safely assume that nCellKey is 32-bits  
-  */
-  assert( sqlite3BtreeCursorIsValid(pCur) );
-  VVA_ONLY(rc =) sqlite3BtreeKeySize(pCur, &nCellKey);
-  assert( rc==SQLITE_OK );     /* pCur is always valid so KeySize cannot fail */
-  assert( (nCellKey & SQLITE_MAX_U32)==(uint64)nCellKey );
+	//	Get the size of the index entry. Only indices entries of less than 2GiB are support - anything large must be database corruption. Any corruption is detected in sqlite3BtreeParseCellPtr(), though, so this code can safely assume that nCellKey is 32-bits
+	assert( sqlite3BtreeCursorIsValid(pCur) )
+	VVA_ONLY(rc =) sqlite3BtreeKeySize(pCur, &nCellKey)
+	assert( rc == SQLITE_OK )									//	pCur is always valid so KeySize cannot fail
+	assert( nCellKey & SQLITE_MAX_U32 == uint64(nCellKey) )
 
-  /* Read in the complete content of the index entry */
-  memset(&m, 0, sizeof(m));
-  rc = sqlite3VdbeMemFromBtree(pCur, 0, (int)nCellKey, 1, &m);
-  if( rc ){
-    return rc;
-  }
+	//	Read in the complete content of the index entry
+	m := new(Mem)
+	if rc = sqlite3VdbeMemFromBtree(pCur, 0, int(nCellKey), 1, &m); rc != SQLITE_OK {
+		return rc
+	}
 
-  /* The index entry must begin with a header size */
-  (void)getVarint32((byte*)m.z, szHdr);
-  if szHdr<3 || (int)szHdr > m.n {
-    goto idx_rowid_corruption;
-  }
+	defer func() {
+		m.Release()
+	}()
 
-  /* The last field of the index should be an integer - the ROWID.
-  ** Verify that the last entry really is an integer. */
-  (void)getVarint32((byte*)&m.z[szHdr-1], typeRowid);
-  if typeRowid < 1 || typeRowid > 9 || typeRowid == 7 {
-    goto idx_rowid_corruption;
-  }
-  lenRowid = VdbeSerialTypeLen(typeRowid)
-  if (uint32) m.n < szHdr+lenRowid {
-    goto idx_rowid_corruption;
-  }
+	//	The index entry must begin with a header size
+	if szHdr, _ = Buffer(m.z).getVarint32(); szHdr < 3 || int(szHdr) > m.n {
+		return SQLITE_CORRUPT_BKPT
+	}
 
-  /* Fetch the integer off the end of the index record */
-  v.VdbeSerialGet(([]byte)(m.z)[m.n - lenRowid:], typeRowid)
-  *rowid = v.Integer()
-  m.Release()
-  return SQLITE_OK;
+	//	The last field of the index should be an integer - the ROWID. Verify that the last entry really is an integer.
+	if typeRowid, _ = Buffer(&m.z[szHdr - 1]).getVarint32(); typeRowid < 1 || typeRowid > 9 || typeRowid == 7 {
+		return SQLITE_CORRUPT_BKPT
+	}
 
-  /* Jump here if database corruption is detected after m has been
-  ** allocated.  Free the m object and return SQLITE_CORRUPT. */
-idx_rowid_corruption:
-  m.Release()
-  return SQLITE_CORRUPT_BKPT;
+	if lenRowid = VdbeSerialTypeLen(typeRowid); uint32(m.n) < szHdr + lenRowid {
+		return SQLITE_CORRUPT_BKPT
+	}
+
+	//	Fetch the integer off the end of the index record
+	v.VdbeSerialGet(([]byte)(m.z)[m.n - lenRowid:], typeRowid)
+	*rowid = v.Integer()
+	return SQLITE_OK
 }
 
 /*
@@ -2177,8 +2144,7 @@ idx_rowid_corruption:
   assert( sqlite3BtreeCursorIsValid(pCur) );
   VVA_ONLY(rc =) sqlite3BtreeKeySize(pCur, &nCellKey);
   assert( rc==SQLITE_OK );    /* pCur is always valid so KeySize cannot fail */
-  /* nCellKey will always be between 0 and 0xffffffff because of the way
-  ** that CellInfo::ParsePtr() and sqlite3GetVarint32() are implemented */
+	//	nCellKey will always be between 0 and 0xffffffff because of the way that CellInfo::ParsePtr() and GetVarint32() are implemented
   if( nCellKey<=0 || nCellKey>0x7fffffff ){
     *res = 0;
     return SQLITE_CORRUPT_BKPT;
