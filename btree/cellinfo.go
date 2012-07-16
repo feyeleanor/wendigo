@@ -34,7 +34,8 @@ func (p *CellInfo) ParsePtr(page *MemoryPage, cell Buffer) {
 		} else {
 			payload = 0
 		}
-		n += getVarint(&p[n], (uint64*)&p.Key)
+		p.Key, buf = Buffer(p[n:]).GetVarint64()
+		n += len(buf) - len(p[n:])
 		p.Data = payload
 	} else {
 		p.Data = 0

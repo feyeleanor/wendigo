@@ -7311,7 +7311,6 @@ type VdbeOpList {
  sqlite3_value *sqlite3VdbeGetValue(Vdbe*, int, byte);
  void sqlite3VdbeSetVarmask(Vdbe*, int);
 
- int sqlite3VdbeRecordCompare(int,const void*,UnpackedRecord*);
  UnpackedRecord *sqlite3VdbeAllocUnpackedRecord(KeyInfo *, char *, int, char **);
 #endif
 

@@ -1950,18 +1950,19 @@ void sqlite3VdbeRecordUnpack(
   const void *pKey,      /* The binary record */
   UnpackedRecord *p      /* Populate this structure before returning. */
 ){
-  const unsigned char *aKey = (const unsigned char *)pKey;
+	aKey := Buffer(pKey)
 
 	pMem := p.aMem
 	p.flags := 0
 	assert( EIGHT_BYTE_ALIGNMENT(pMem) )
 	var szHdr	uint32
-	idx := getVarint32(aKey, szHdr)
+	szHdr, buffer := aKey.GetVarint32()
+	idx := len(aKey) - len(buffer)
 	d := szHdr
 	u := 0
 	for ; idx < szHdr && u < p.nField && d <= nKey; {
-		serial_type	uint32
-		idx += getVarint32(&aKey[idx], serial_type)
+		serial_type, buffer := aKey[idx:].GetVarint32()
+		idx += len(aKey[idx]) - len(buffer)
 		pMem.enc = pKeyInfo.enc
 		pMem.db = pKeyInfo.db
 		//	pMem.flags = 0; // VdbeSerialGet() will set this for us */
@@ -1974,103 +1975,68 @@ void sqlite3VdbeRecordUnpack(
 	p.nField = u
 }
 
-/*
-** This function compares the two table rows or index records
-** specified by {nKey1, pKey1} and pPKey2.  It returns a negative, zero
-** or positive integer if key1 is less than, equal to or 
-** greater than key2.  The {nKey1, pKey1} key must be a blob
-** created by th OP_MakeRecord opcode of the VDBE.  The pPKey2
-** key must be a parsed key such as obtained from
-** sqlite3VdbeParseRecord.
-**
-** Key1 and Key2 do not have to contain the same number of fields.
-** The key with fewer fields is usually compares less than the 
-** longer key.  However if the UNPACKED_INCRKEY flags in pPKey2 is set
-** and the common prefixes are equal, then key1 is less than key2.
-** Or if the UNPACKED_MATCH_PREFIX flag is set and the prefixes are
-** equal, then the keys are considered to be equal and
-** the parts beyond the common prefix are ignored.
-*/
- int sqlite3VdbeRecordCompare(
-  int nKey1, const void *pKey1, /* Left key */
-  UnpackedRecord *pPKey2        /* Right key */
-){
-  int d1;            /* Offset into aKey[] of next data element */
-  uint32 idx1;          /* Offset into aKey[] of next header element */
-  uint32 szHdr1;        /* Number of bytes in header */
-  int i = 0;
-  int nField;
-  int rc = 0;
-  const unsigned char *aKey1 = (const unsigned char *)pKey1;
-  KeyInfo *pKeyInfo;
-  Mem mem1;
+//	This function compares the two table rows or index records specified by {nKey1, pKey1} and pPKey2. It returns a negative, zero or positive integer if key1 is less than, equal to or greater than key2. The {nKey1, pKey1} key must be a blob created by th OP_MakeRecord opcode of the VDBE. The pPKey2 key must be a parsed key such as obtained from sqlite3VdbeParseRecord.
+//	Key1 and Key2 do not have to contain the same number of fields. The key with fewer fields is usually compares less than the longer key. However if the UNPACKED_INCRKEY flags in pPKey2 is set and the common prefixes are equal, then key1 is less than key2. Or if the UNPACKED_MATCH_PREFIX flag is set and the prefixes are equal, then the keys are considered to be equal and the parts beyond the common prefix are ignored.
+func VdbeRecordCompare(pKey1 Buffer, pPKey2 *UnpackedRecord) (rc int) {
+	nKey1 := len(pKey1)
+	aKey1 := ([]byte)(pKey1)
+	pKeyInfo := pPKey2.pKeyInfo
+	mem1 := &Mem{ enc: pKeyInfo.enc, db: pKeyInfo.db }
 
-  pKeyInfo = pPKey2.pKeyInfo;
-  mem1.enc = pKeyInfo.enc;
-  mem1.db = pKeyInfo.db;
-  /* mem1.flags = 0;  // Will be initialized by VdbeSerialGet() */
-  VVA_ONLY( mem1.zMalloc = 0; ) /* Only needed by assert() statements */
-
-  idx1 = getVarint32(aKey1, szHdr1);
-  d1 = szHdr1;
-  nField = pKeyInfo.nField;
-  while( idx1<szHdr1 && i<pPKey2.nField ){
-    uint32 serial_type1;
-
-    /* Read the serial types for the next element in each key. */
-    idx1 += getVarint32( aKey1+idx1, serial_type1 );
-    if( d1>=nKey1 && VdbeSerialTypeLen(serial_type1)>0 ) break;
-
-    /* Extract the values to be compared.
-    */
-    d1 += mem1.VdbeSerialGet(&aKey1[d1:], serial_type1)
-
-    /* Do the comparison
-    */
-    rc = sqlite3MemCompare(&mem1, &pPKey2.aMem[i],
-                           i<nField ? pKeyInfo.Collations[i] : 0);
-    if( rc!=0 ){
-      assert( mem1.zMalloc==0 );  /* See comment below */
-
-      /* Invert the result if we are using DESC sort order. */
-      if( pKeyInfo.aSortOrder && i<nField && pKeyInfo.aSortOrder[i] ){
-        rc = -rc;
-      }
-    
-		//	If the PREFIX_SEARCH flag is set and all fields except the final rowid field were equal, then clear the PREFIX_SEARCH flag and set pPKey2.rowid to the value of the rowid field in (pKey1, nKey1). This is used by the OP_IsUnique opcode.
-	  	if pPKey2.flags & UNPACKED_PREFIX_SEARCH && i == pPKey2.nField - 1 {
-			assert( idx1 == szHdr1 && rc )
-			pPKey2.flags &= ~UNPACKED_PREFIX_SEARCH
-			pPKey2.rowid = mem1.Integer()
+	szHdr1, buf := aKey1.GetVarint32()
+	iudx1 := len(nKey1) - len(buf)
+	d1 := szHdr1
+	nField := pKeyInfo.nField;
+	for i := 0; idx1 < szHdr1 && i < pPKey2.nField; i++ {
+		//	Read the serial types for the next element in each key.
+		serial_type1, buf := Buffer(aKey[idx1:]).GetVarint32()
+		idx += len(aKey[idx1:]) - len(buf)
+		if d1 >= nKey1 && VdbeSerialTypeLen(serial_type1) > 0 {
+			break
 		}
-		return rc
-    }
-    i++;
-  }
 
-  /* No memory allocation is ever used on mem1.  Prove this using
-  ** the following assert().  If the assert() fails, it indicates a
-  ** memory leak and a need to call mem1.Release().
-  */
-  assert( mem1.zMalloc==0 );
+		//	Extract the values to be compared.
+		d1 += mem1.VdbeSerialGet(aKey1[d1:], serial_type1)
 
-  /* rc==0 here means that one of the keys ran out of fields and
-  ** all the fields up to that point were equal. If the UNPACKED_INCRKEY
-  ** flag is set, then break the tie by treating key2 as larger.
-  ** If the UPACKED_PREFIX_MATCH flag is set, then keys with common prefixes
-  ** are considered to be equal.  Otherwise, the longer key is the 
-  ** larger.  As it happens, the pPKey2 will always be the longer
-  ** if there is a difference.
-  */
-  assert( rc==0 );
-  if( pPKey2.flags & UNPACKED_INCRKEY ){
-    rc = -1;
-  }else if( pPKey2.flags & UNPACKED_PREFIX_MATCH ){
-    /* Leave rc==0 */
-  }else if( idx1<szHdr1 ){
-    rc = 1;
-  }
-  return rc;
+		//	Do the comparison
+		if i < nField {
+			rc = sqlite3MemCompare(&mem1, pPKey2.aMem[i], pKeyInfo.Collations[i])
+		} else {
+			rc = sqlite3MemCompare(&mem1, pPKey2.aMem[i], 0)
+		}
+
+		if rc != 0 {
+			assert( mem1.zMalloc == "" )			//	See comment below
+
+			//	Invert the result if we are using DESC sort order.
+			if pKeyInfo.aSortOrder && i < nField && pKeyInfo.aSortOrder[i] {
+				rc = -rc
+			}
+    
+			//	If the PREFIX_SEARCH flag is set and all fields except the final rowid field were equal, then clear the PREFIX_SEARCH flag and set pPKey2.rowid to the value of the rowid field in (pKey1, nKey1). This is used by the OP_IsUnique opcode.
+			if pPKey2.flags & UNPACKED_PREFIX_SEARCH && i == pPKey2.nField - 1 {
+				assert( idx1 == szHdr1 && rc )
+				pPKey2.flags &= ~UNPACKED_PREFIX_SEARCH
+				pPKey2.rowid = mem1.Integer()
+			}
+			return rc
+		}
+	}
+
+	//	No memory allocation is ever used on mem1. Prove this using the following assert(). If the assert() fails, it indicates a memory leak and a need to call mem1.Release().
+	assert( mem1.zMalloc == "" )
+
+	//	rc == 0 here means that one of the keys ran out of fields and all the fields up to that point were equal. If the UNPACKED_INCRKEY flag is set, then break the tie by treating key2 as larger. If the UPACKED_PREFIX_MATCH flag is set, then keys with common prefixes are considered to be equal. Otherwise, the longer key is the larger. As it happens, the pPKey2 will always be the longer if there is a difference.
+	assert( rc == 0 )
+	switch {
+	case pPKey2.flags & UNPACKED_INCRKEY:
+		rc = -1
+	case pPKey2.flags & UNPACKED_PREFIX_MATCH:
+		//	Leave rc == 0
+	case idx1 < szHdr1:
+		rc = 1
+	}
+	return rc
 }
  
 
@@ -2101,12 +2067,12 @@ int sqlite3VdbeIdxRowid(sqlite3 *db, btree.Cursor *pCur, int64 *rowid) {
 	}()
 
 	//	The index entry must begin with a header size
-	if szHdr, _ = Buffer(m.z).getVarint32(); szHdr < 3 || int(szHdr) > m.n {
+	if szHdr, _ = Buffer(m.z).GetVarint32(); szHdr < 3 || int(szHdr) > m.n {
 		return SQLITE_CORRUPT_BKPT
 	}
 
 	//	The last field of the index should be an integer - the ROWID. Verify that the last entry really is an integer.
-	if typeRowid, _ = Buffer(&m.z[szHdr - 1]).getVarint32(); typeRowid < 1 || typeRowid > 9 || typeRowid == 7 {
+	if typeRowid, _ = Buffer(&m.z[szHdr - 1:]).GetVarint32(); typeRowid < 1 || typeRowid == 7 || typeRowid > 9 {
 		return SQLITE_CORRUPT_BKPT
 	}
 
@@ -2131,33 +2097,31 @@ int sqlite3VdbeIdxRowid(sqlite3 *db, btree.Cursor *pCur, int64 *rowid) {
 ** is ignored as well.  Hence, this routine only compares the prefixes 
 ** of the keys prior to the final rowid, not the entire key.
 */
- int sqlite3VdbeIdxKeyCompare(
+int sqlite3VdbeIdxKeyCompare(
   VdbeCursor *pC,             /* The cursor to compare against */
   UnpackedRecord *pUnpacked,  /* Unpacked version of key to compare against */
   int *res                    /* Write the comparison result here */
 ){
-  int64 nCellKey = 0;
-  int rc;
-  btree.Cursor *pCur = pC.pCursor;
-  Mem m;
+	int64 nCellKey = 0;
+	int rc;
+	btree.Cursor *pCur = pC.pCursor;
+	Mem m;
 
-  assert( sqlite3BtreeCursorIsValid(pCur) );
-  VVA_ONLY(rc =) sqlite3BtreeKeySize(pCur, &nCellKey);
-  assert( rc==SQLITE_OK );    /* pCur is always valid so KeySize cannot fail */
+	assert( sqlite3BtreeCursorIsValid(pCur) );
+	VVA_ONLY(rc =) sqlite3BtreeKeySize(pCur, &nCellKey);
+	assert( rc == SQLITE_OK );    /* pCur is always valid so KeySize cannot fail */
 	//	nCellKey will always be between 0 and 0xffffffff because of the way that CellInfo::ParsePtr() and GetVarint32() are implemented
-  if( nCellKey<=0 || nCellKey>0x7fffffff ){
-    *res = 0;
-    return SQLITE_CORRUPT_BKPT;
-  }
-  memset(&m, 0, sizeof(m));
-  rc = sqlite3VdbeMemFromBtree(pC.pCursor, 0, (int)nCellKey, 1, &m);
-  if( rc ){
-    return rc;
-  }
-  assert( pUnpacked.flags & UNPACKED_PREFIX_MATCH );
-  *res = sqlite3VdbeRecordCompare(m.n, m.z, pUnpacked);
-  m.Release()
-  return SQLITE_OK;
+	if( nCellKey<=0 || nCellKey>0x7fffffff ){
+		*res = 0;
+		return SQLITE_CORRUPT_BKPT;
+	}
+	memset(&m, 0, sizeof(m));
+	if rc = sqlite3VdbeMemFromBtree(pC.pCursor, 0, (int)nCellKey, 1, &m); rc == SQLITE_OK {
+		assert( pUnpacked.flags & UNPACKED_PREFIX_MATCH )
+		*res = VdbeRecordCompare(m.z, pUnpacked)
+		m.Release()
+	}
+	return rc
 }
 
 //	This routine sets the value to be returned by subsequent calls to sqlite3_changes() on the database handle 'db'. 

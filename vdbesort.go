@@ -198,7 +198,9 @@ static int vdbeSorterWriteVarint(
 func (pFile *sqlite3_file) ReadVarint(offset int64) (v, o int64, rc int) {
 	aVarint := make([]byte, 9)			//	Buffer large enough for a varint
 	if rc = sqlite3OsRead(pFile, aVarint, 9, offset); rc == SQLITE_OK {
-		o, v = getVarint(aVarint)
+		var buffer	Buffer
+		v, buffer = aVarint.GetVarint64()
+		o = 9 - len(buffer)
 	}
 	o += offset
 	return rc
@@ -244,7 +246,7 @@ func (pCsr *VdbeCursor) sorterCompare(bOmitRowid bool, pKey1, pKey2 []byte) (pRe
 		}
 		r2.flags |= UNPACKED_PREFIX_MATCH
 	}
-	return sqlite3VdbeRecordCompare(nKey1, pKey1, r2)
+	return VdbeRecordCompare(pKey1, r2)
 }
 
 //	This function is called to compare two iterator keys when merging multiple b-tree segments. Parameter iOut is the index of the aTree[] value to recalculate.

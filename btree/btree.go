@@ -3337,13 +3337,12 @@ func (pCur *Cursor) BtreeMovetoUnpacked(indexKey *UnpackedRecord, tableKey int64
 		for {
 			assert( idx == pCur.aiIdx[pCur.iPage] )
 			pCur.CellInfo.nSize = 0
-			pCell := pPage.FindCell(idx) + pPage.childPtrSize
+			pCell := Buffer(pPage.FindCell(idx)[pPage.childPtrSize:])
 			if pPage.intKey {
-				int64 nCellKey
 				if pPage.hasData {
 					_, pCell = pCell.GetVarint32()
 				}
-				getVarint(pCell, (uint64*)(&nCellKey))
+				nCellKey, _ := pCell.GetVarint64()
 				switch {
 				case nCellKey == tableKey:
 					c = 0
@@ -3360,28 +3359,22 @@ func (pCur *Cursor) BtreeMovetoUnpacked(indexKey *UnpackedRecord, tableKey int64
 				nCell := pCell[0]
 				if nCell <= pPage.max1bytePayload /* && (pCell + nCell) < pPage.aDataEnd */ {
 					//	This branch runs if the record-size field of the cell is a single byte varint and the record fits entirely on the main b-tree page.
-					c = sqlite3VdbeRecordCompare(nCell, (void*)&pCell[1], indexKey)
+					c = VdbeRecordCompare(pCell[1:], indexKey)
 				} else if !(pCell[1] & 0x80) && (nCell = ((nCell & 0x7f) << 7) + pCell[1]) <= pPage.maxLocal /* && (pCell + nCell + 2) <= pPage.aDataEnd */ {
 					//	The record-size field is a 2 byte varint and the record fits entirely on the main b-tree page.
-					c = sqlite3VdbeRecordCompare(nCell, (void*)&pCell[2], indexKey)
+					c = VdbeRecordCompare(pCell[2:], indexKey)
 				} else {
 					//	The record flows over onto one or more overflow pages. In this case the whole cell needs to be parsed, a buffer allocated and accessPayload() used to retrieve the record into the buffer before VdbeRecordCompare() can be called.
 					pCellBody := pCell - pPage.childPtrSize
 					&pCur.CellInfo.ParsePtr(pPage, pCellBody)
 					nCell = int(pCur.CellInfo.nKey)
-					pCellKey := sqlite3Malloc( nCell )
-					if pCellKey == nil {
-						rc = SQLITE_NOMEM
+					CellKey := make(Buffer, nCell)
+					if rc = accessPayload(pCur, 0, nCell, CellKey, 0); rc != SQLITE_OK {
 						goto moveto_finish
 					}
-					if rc = accessPayload(pCur, 0, nCell, (unsigned char*)pCellKey, 0); rc != SQLITE_OK {
-						pCellKey = nil
-						goto moveto_finish
-					}
-					c = sqlite3VdbeRecordCompare(nCell, pCellKey, indexKey)
-							pCellKey = nil
-					}
+					c = VdbeRecordCompare(CellKey, indexKey)
 				}
+			}
 			if c == 0 {
     			if pPage.intKey && !pPage.leaf {
 					lwr = idx

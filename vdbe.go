@@ -1896,9 +1896,7 @@ case OP_Column: {
       assert( sqlite3BtreeCursorIsValid(u.an.pCrsr) );
       VVA_ONLY(rc =) sqlite3BtreeKeySize(u.an.pCrsr, &u.an.payloadSize64);
       assert( rc==SQLITE_OK );   /* True because of CursorMoveto() call above */
-      /* sqlite3BtreeParseCellPtr() uses getVarint32() to extract the
-      ** payload size, so it is impossible for u.an.payloadSize64 to be
-      ** larger than 32 bits. */
+		//	sqlite3BtreeParseCellPtr() uses GetVarint32() to extract the payload size, so it is impossible for u.an.payloadSize64 to be larger than 32 bits.
       assert( (u.an.payloadSize64 & SQLITE_MAX_U32)==(uint64)u.an.payloadSize64 );
       u.an.payloadSize = (uint32)u.an.payloadSize64;
     }else{
@@ -1967,21 +1965,16 @@ case OP_Column: {
         u.an.pC.aRow = 0;
       }
     }
-    /* The following assert is true in all cases except when
-    ** the database file has been corrupted externally.
-    **    assert( u.an.zRec!=0 || u.an.avail>=u.an.payloadSize || u.an.avail>=9 ); */
-    u.an.szHdr = getVarint32((byte*)u.an.zData, u.an.offset);
 
-    /* Make sure a corrupt database has not given us an oversize header.
-    ** Do this now to avoid an oversize memory allocation.
-    **
-    ** Type entries can be between 1 and 5 bytes each.  But 4 and 5 byte
-    ** types use so much data space that there can only be 4096 and 32 of
-    ** them, respectively.  So the maximum header length results from a
-    ** 3-byte type for each of the maximum of 32768 columns plus three
-    ** extra bytes for the header length itself.  32768*3 + 3 = 98307.
-    */
-    if( u.an.offset > 98307 ){
+	//	The following assert is true in all cases except when the database file has been corrupted externally.
+	//			assert( u.an.zRec != 0 || u.an.avail >= u.an.payloadSize || u.an.avail >= 9 );
+	var buffer	Buffer
+    u.an.offset, buffer = Buffer(u.an.zData).GetVarint32()
+	u.an.szHdr = len(u.an.zData) - len(buffer)
+
+	//	Make sure a corrupt database has not given us an oversize header. Do this now to avoid an oversize memory allocation.
+	//	Type entries can be between 1 and 5 bytes each. But 4 and 5 byte types use so much data space that there can only be 4096 and 32 of them, respectively. So the maximum header length results from a 3-byte type for each of the maximum of 32768 columns plus three extra bytes for the header length itself.  32768*3 + 3 = 98307.
+    if u.an.offset > 98307 {
       rc = SQLITE_CORRUPT_BKPT;
       goto op_column_out;
     }
