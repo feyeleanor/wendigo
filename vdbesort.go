@@ -150,7 +150,7 @@ func (pIter *VdbeSorterIter) Next() (rc int) {
 	var b	Buffer
 	if rc = sqlite3OsRead(pIter.File, pIter.Data, nRead, pIter.iReadOff); rc == SQLITE_OK {
 		l := len(pIter.Data)
-		nRec, b = pIter.Data.GetVarint32()
+		nRec, b = pIter.Data.ReadVarint32()
 		if iOff = l - len(b); iOff + nRec > nRead {
 			if iOff + nRec > l {
 				for nNew := l * 2; iOff + nRec > nNew; nNew = nNew * 2 {
@@ -169,28 +169,14 @@ func (pIter *VdbeSorterIter) Next() (rc int) {
 	return rc
 }
 
-/*
-** Write a single varint, value iVal, to file-descriptor pFile. Return
-** SQLITE_OK if successful, or an SQLite error code if some error occurs.
-**
-** The value of *piOffset when this function is called is used as the byte
-** offset in file pFile to write to. Before returning, *piOffset is 
-** incremented by the number of bytes written.
-*/
-static int vdbeSorterWriteVarint(
-  sqlite3_file *pFile,            /* File to write to */
-  int64 iVal,                       /* Value to write as a varint */
-  int64 *piOffset                   /* IN/OUT: Write offset in file pFile */
-){
-  byte aVarint[9];                  /* Buffer large enough for a varint */
-  int nVarint;                    /* Number of used bytes in varint */
-  int rc;                         /* Result of write() call */
-
-  nVarint = sqlite3PutVarint(aVarint, iVal);
-  rc = sqlite3OsWrite(pFile, aVarint, nVarint, *piOffset);
-  *piOffset += nVarint;
-
-  return rc;
+//	Write a single varint, value iVal, to file-descriptor pFile. Return SQLITE_OK if successful, or an SQLite error code if some error occurs.
+//	The value of *piOffset when this function is called is used as the byte offset in file pFile to write to. Before returning, *piOffset is incremented by the number of bytes written.
+func (pFile *sqlite3_file) SorterWriteVarint(iVal int64, offset int64) (o int64, rc int) {
+	buffer := make(Buffer, 9)
+	nVarint := 9 - len(buffer.WriteVarint64(iVal))
+	rc = sqlite3OsWrite(pFile, buffer, nVarint, offset)
+	o = offset + nVarint
+	return
 }
 
 //	Read a single varint from file-descriptor pFile. Return SQLITE_OK if successful, or an SQLite error code if some error occurs.
@@ -199,7 +185,7 @@ func (pFile *sqlite3_file) ReadVarint(offset int64) (v, o int64, rc int) {
 	aVarint := make([]byte, 9)			//	Buffer large enough for a varint
 	if rc = sqlite3OsRead(pFile, aVarint, 9, offset); rc == SQLITE_OK {
 		var buffer	Buffer
-		v, buffer = aVarint.GetVarint64()
+		v, buffer = aVarint.ReadVarint64()
 		o = 9 - len(buffer)
 	}
 	o += offset
@@ -442,10 +428,10 @@ static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
     static const char eightZeros[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
     pSorter.nPMA++;
-    rc = vdbeSorterWriteVarint(pSorter.pTemp1, pSorter.nInMemory, &iOff);
+    iOff, rc = pSorter.pTemp1.SorterWriteVarint(pSorter.nInMemory, iOff)
     for(p=pSorter.pRecord; rc==SQLITE_OK && p; p=Next){
       Next = p.Next;
-      rc = vdbeSorterWriteVarint(pSorter.pTemp1, p.nVal, &iOff);
+      iOff, rc = pSorter.pTemp1.SorterWriteVarint(p.nVal, iOff)
 
       if( rc==SQLITE_OK ){
         rc = sqlite3OsWrite(pSorter.pTemp1, p.pVal, p.nVal, iOff);
@@ -458,9 +444,7 @@ static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
     /* This assert verifies that unless an error has occurred, the size of 
     ** the PMA on disk is the same as the expected size stored in
     ** pSorter.nInMemory. */ 
-    assert( rc!=SQLITE_OK || pSorter.nInMemory==(
-          iOff-pSorter.iWriteOff-sqlite3VarintLen(pSorter.nInMemory)
-    ));
+    assert( rc != SQLITE_OK || pSorter.nInMemory == iOff - pSorter.iWriteOff - VarintLen(pSorter.nInMemory))
 
     pSorter.iWriteOff = iOff;
     if( rc==SQLITE_OK ){
@@ -487,7 +471,7 @@ static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
   SorterRecord *pNew;             /* New list element */
 
   assert( pSorter );
-  pSorter.nInMemory += sqlite3VarintLen(pVal.n) + pVal.n;
+  pSorter.nInMemory += VarintLen(pVal.n) + pVal.n;
 
   pNew = (SorterRecord *)sqlite3DbMallocRaw(db, pVal.n + sizeof(SorterRecord));
   if( pNew==0 ){
@@ -601,14 +585,14 @@ int sqlite3VdbeSorterRewind(sqlite3 *db, VdbeCursor *pCsr, int *pbEof){
 			}
 
 			if rc == SQLITE_OK {
-				rc = vdbeSorterWriteVarint(pTemp2, nWrite, &iWrite2)
+				iWrite2, rc = pTemp2.SorterWriteVarint(nWrite, iWrite2)
 			}
 
 			if rc == SQLITE_OK {
 				for bEof := false; rc == SQLITE_OK && !bEof; {
 					pIter := &pSorter.aIter[pSorter.aTree[1]]
 					assert( pIter.File != nil )
-					nToWrite := len(pIter.Key) + sqlite3VarintLen(len(pIter.Key))
+					nToWrite := len(pIter.Key) + VarintLen(len(pIter.Key))
 					rc = sqlite3OsWrite(pTemp2, pIter.Data, nToWrite, iWrite2)
 					iWrite2 += nToWrite
 					if rc == SQLITE_OK {

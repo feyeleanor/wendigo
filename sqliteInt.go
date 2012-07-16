@@ -7725,7 +7725,6 @@ struct PgHdr {
 */
  int sqlite3OsClose(sqlite3_file*);
  int sqlite3OsRead(sqlite3_file*, void*, int amt, int64 offset);
- int sqlite3OsWrite(sqlite3_file*, const void*, int amt, int64 offset);
  int sqlite3OsTruncate(sqlite3_file*, int64 size);
  int sqlite3OsSync(sqlite3_file*, int);
  int sqlite3OsFileSize(sqlite3_file*, int64 *pSize);
@@ -9391,9 +9390,6 @@ func (p *Parse) ParseTopLevel() *Parse {
  void sqlite3MemJournalOpen(sqlite3_file *);
  int sqlite3MemJournalSize(void);
  int sqlite3IsMemJournal(sqlite3_file *);
-
- uint32 Get4Byte(const byte*);
- void Put4Byte(byte*, uint32);
 
 /*
 ** If the SQLITE_ENABLE IOTRACE exists then the global variable

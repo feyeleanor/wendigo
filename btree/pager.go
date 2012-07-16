@@ -846,18 +846,18 @@ static int pageInJournal(PgHdr *pPg){
 ** All values are stored on disk as big-endian.
 */
 static int read32bits(sqlite3_file *fd, int64 offset, uint32 *pRes){
-  unsigned char ac[4];
-  int rc = sqlite3OsRead(fd, ac, sizeof(ac), offset);
-  if( rc==SQLITE_OK ){
-    *pRes = Get4Byte(ac);
-  }
-  return rc;
+	ac := make(Buffer, 4)
+	int rc = sqlite3OsRead(fd, ac, sizeof(ac), offset);
+	if( rc==SQLITE_OK ){
+		*pRes = ac.ReadUint32()
+	}
+	return rc;
 }
 
 /*
 ** Write a 32-bit integer into a string buffer in big-endian byte order.
 */
-#define put32bits(A,B)  Put4Byte((byte*)A,B)
+#define put32bits(A,B)  Buffer(A).WriteUint32(B)
 
 
 /*
@@ -2642,7 +2642,7 @@ static void pager_write_changecounter(PgHdr *pPg){
   uint32 change_counter;
 
   /* Increment the value just read and write it back to byte 24. */
-  change_counter = Get4Byte((byte*)pPg.pPager.dbFileVers)+1;
+  change_counter = Buffer(pPg.pPager.dbFileVers).ReadUint32() + 1
   put32bits(((char*)pPg.pData)+24, change_counter);
 
   /* Also store the SQLite version number in bytes 96..99 and in

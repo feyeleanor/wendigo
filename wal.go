@@ -646,19 +646,19 @@ static void walEncodeFrame(
   byte *aData,                      /* Pointer to page data */
   byte *aFrame                      /* OUT: Write encoded frame here */
 ){
-  int nativeCksum;                /* True for native byte-order checksums */
-  uint32 *aCksum = pWal.hdr.aFrameCksum;
+	int nativeCksum;                /* True for native byte-order checksums */
+	aCksum = pWal.hdr.aFrameCksum
   assert( WAL_FRAME_HDRSIZE==24 );
-  Put4Byte(&aFrame[0], iPage);
-  Put4Byte(&aFrame[4], nTruncate);
-  memcpy(&aFrame[8], pWal.hdr.aSalt, 8);
+  Buffer(aFrame).WriteUint32(iPage)
+  Buffer(aFrame[4:]).WriteUint32(nTruncate)
+  Copy(aFrame[8:], pWal.hdr.aSalt[:8])
 
   nativeCksum = (pWal.hdr.bigEndCksum==SQLITE_BIGENDIAN);
   walChecksumBytes(nativeCksum, aFrame, 8, aCksum, aCksum);
   walChecksumBytes(nativeCksum, aData, pWal.PageSize, aCksum, aCksum);
 
-  Put4Byte(&aFrame[16], aCksum[0]);
-  Put4Byte(&aFrame[20], aCksum[1]);
+  Buffer(aFrame[16:]).WriteUint32(aCksum[0])
+  Buffer(aFrame[20:]).WriteUint32(aCksum[1])
 }
 
 /*
@@ -687,7 +687,7 @@ static int walDecodeFrame(
 
   /* A frame is only valid if the page number is creater than zero.
   */
-  pgno = Get4Byte(&aFrame[0]);
+  pgno = Buffer(aFrame).ReadUint32()
   if( pgno==0 ){
     return 0;
   }
@@ -700,9 +700,7 @@ static int walDecodeFrame(
   nativeCksum = (pWal.hdr.bigEndCksum==SQLITE_BIGENDIAN);
   walChecksumBytes(nativeCksum, aFrame, 8, aCksum, aCksum);
   walChecksumBytes(nativeCksum, aData, pWal.PageSize, aCksum, aCksum);
-  if( aCksum[0]!=Get4Byte(&aFrame[16]) 
-   || aCksum[1]!=Get4Byte(&aFrame[20]) 
-  ){
+  if aCksum[0] != Buffer(aFrame[16:]).ReadUint32() || aCksum[1] != Buffer(aFrame[20:]).ReadUint32() {
     /* Checksum failed. */
     return 0;
   }
@@ -711,7 +709,7 @@ static int walDecodeFrame(
   ** and the new database size.
   */
   *piPage = pgno;
-  *pnTruncate = Get4Byte(&aFrame[4]);
+  *pnTruncate = Buffer(aFrame[4:]).ReadUint32()
   return 1;
 }
 
@@ -1051,8 +1049,8 @@ static int walIndexRecover(Wal *pWal){
     ** data. Similarly, if the 'magic' value is invalid, ignore the whole
     ** WAL file.
     */
-    magic = Get4Byte(&aBuf[0]);
-    PageSize = Get4Byte(&aBuf[8]);
+    magic = Buffer(aBuf).ReadUint32()
+    PageSize = Buffer(aBuf[8:]).ReadUint32()
     if( (magic&0xFFFFFFFE)!=WAL_MAGIC 
      || PageSize&(PageSize-1) 
      || PageSize>SQLITE_MAX_PAGE_SIZE 
@@ -1062,22 +1060,20 @@ static int walIndexRecover(Wal *pWal){
     }
     pWal.hdr.bigEndCksum = (byte)(magic&0x00000001);
     pWal.PageSize = PageSize;
-    pWal.nCkpt = Get4Byte(&aBuf[12]);
+    pWal.nCkpt = Buffer(aBuf[12:]).ReadUint32()
     memcpy(&pWal.hdr.aSalt, &aBuf[16], 8);
 
     /* Verify that the WAL header checksum is correct */
     walChecksumBytes(pWal.hdr.bigEndCksum==SQLITE_BIGENDIAN, 
         aBuf, WAL_HDRSIZE-2*4, 0, pWal.hdr.aFrameCksum
     );
-    if( pWal.hdr.aFrameCksum[0]!=Get4Byte(&aBuf[24])
-     || pWal.hdr.aFrameCksum[1]!=Get4Byte(&aBuf[28])
-    ){
+    if pWal.hdr.aFrameCksum[0] != Buffer(aBuf[24:]).ReadUint32() || pWal.hdr.aFrameCksum[1] != Buffer(aBuf[28:]).ReadUint32() {
       goto finished;
     }
 
     /* Verify that the version number on the WAL format is one that
     ** are able to understand */
-    version = Get4Byte(&aBuf[4]);
+    version = Buffer(aBuf[4:]).ReadUint32()
     if( version!=WAL_MAX_VERSION ){
       rc = SQLITE_CANTOPEN_BKPT;
       goto finished;
@@ -2509,7 +2505,7 @@ static int walRestartLog(Wal *pWal){
 
         pWal.nCkpt++;
         pWal.hdr.mxFrame = 0;
-        Put4Byte((byte*)&aSalt[0], 1 + Get4Byte((byte*)&aSalt[0]));
+        Buffer(aSalt[0:]).IncrementUint32(1)
         aSalt[1] = salt1;
         walIndexWriteHdr(pWal);
         pInfo.nBackfill = 0;
@@ -2624,18 +2620,18 @@ func (pWal *Wal) WriteFrames(PageSize int, pList *PgHdr, nTruncate PageNumber, i
 		aWalHdr		[WAL_HDRSIZE]byte			//	Buffer to assemble wal-header in
 		aCksum		[2]uint32					//	Checksum for wal-header
 
-		Put4Byte(&aWalHdr[0], (WAL_MAGIC | SQLITE_BIGENDIAN))
-		Put4Byte(&aWalHdr[4], WAL_MAX_VERSION)
-		Put4Byte(&aWalHdr[8], PageSize)
-		Put4Byte(&aWalHdr[12], pWal.nCkpt)
+		Buffer(aWalHdr[0:]).WriteUint32(WAL_MAGIC | SQLITE_BIGENDIAN)
+		Buffer(aWalHdr[4:]).WriteUint32(WAL_MAX_VERSION)
+		Buffer(aWalHdr[8:]).WriteUint32(PageSize)
+		Buffer(aWalHdr[12:]).WriteUint32(pWal.nCkpt)
 
 		if pWal.nCkpt == 0 {
 			rand.Read(pWal.hdr.aSalt[0:7])
 		}
 		memcpy(&aWalHdr[16], pWal.hdr.aSalt, 8)
 		walChecksumBytes(1, aWalHdr, WAL_HDRSIZE - 2 * 4, 0, aCksum)
-		Put4Byte(&aWalHdr[24], aCksum[0])
-		Put4Byte(&aWalHdr[28], aCksum[1])
+		Buffer(aWalHdr[24:]).WriteUint32(aCksum[0])
+		Buffer(aWalHdr[28:]).WriteUint32(aCksum[1])
 
 		pWal.PageSize = PageSize
 		pWal.hdr.bigEndCksum = SQLITE_BIGENDIAN

@@ -1969,7 +1969,7 @@ case OP_Column: {
 	//	The following assert is true in all cases except when the database file has been corrupted externally.
 	//			assert( u.an.zRec != 0 || u.an.avail >= u.an.payloadSize || u.an.avail >= 9 );
 	var buffer	Buffer
-    u.an.offset, buffer = Buffer(u.an.zData).GetVarint32()
+    u.an.offset, buffer = Buffer(u.an.zData).ReadVarint32()
 	u.an.szHdr = len(u.an.zData) - len(buffer)
 
 	//	Make sure a corrupt database has not given us an oversize header. Do this now to avoid an oversize memory allocation.
@@ -2026,7 +2026,7 @@ case OP_Column: {
           u.an.t = u.an.zIdx[0];
           u.an.zIdx++;
         }else{
-		  u.an.t, u.an.zIdx = u.an.zIdx.GetVarint32()
+		  u.an.t, u.an.zIdx = u.an.zIdx.ReadVarint32()
         }
         u.an.aType[u.an.i] = u.an.t;
         u.an.szField = VdbeSerialTypeLen(u.an.t)
@@ -2150,52 +2150,34 @@ case OP_Affinity: {
   break;
 }
 
-/* Opcode: MakeRecord P1 P2 P3 P4 *
-**
-** Convert P2 registers beginning with P1 into the [record format]
-** use as a data record in a database table or as a key
-** in an index.  The OP_Column opcode can decode the record later.
-**
-** P4 may be a string that is P2 characters long.  The nth character of the
-** string indicates the column affinity that should be used for the nth
-** field of the index key.
-**
-** The mapping from character to affinity is given by the SQLITE_AFF_
-** macros defined in sqliteInt.h.
-**
-** If P4 is NULL then all index fields have the affinity NONE.
-*/
-case OP_MakeRecord: {
-  /* Assuming the record contains N fields, the record format looks
-  ** like this:
-  **
-  ** ------------------------------------------------------------------------
-  ** | hdr-size | type 0 | type 1 | ... | type N-1 | data0 | ... | data N-1 |
-  ** ------------------------------------------------------------------------
-  **
-  ** Data(0) is taken from register P1.  Data(1) comes from register P1+1
-  ** and so froth.
-  **
-  ** Each type field is a varint representing the serial type of the
-  ** corresponding data element (see VdbeSerialType()). The
-  ** hdr-size field is also a varint which is the offset from the beginning
-  ** of the record to data0.
-  */
-  u.ap.nData = 0;         /* Number of bytes of data space */
-  u.ap.nHdr = 0;          /* Number of bytes of header space */
-  u.ap.nZero = 0;         /* Number of zero bytes at the end of the record */
-  u.ap.nField = pOp.p1;
-  u.ap.zAffinity = pOp.p4.z;
-  assert( u.ap.nField>0 && pOp.p2>0 && pOp.p2+u.ap.nField<=p.nMem+1 );
-  u.ap.pData0 = &aMem[u.ap.nField];
-  u.ap.nField = pOp.p2;
-  u.ap.Last = &u.ap.pData0[u.ap.nField-1];
-  u.ap.file_format = p.minWriteFileFormat;
+//	Opcode: MakeRecord P1 P2 P3 P4 *
+//	Convert P2 registers beginning with P1 into the [record format] use as a data record in a database table or as a key in an index. The OP_Column opcode can decode the record later.
+//	P4 may be a string that is P2 characters long. The nth character of the string indicates the column affinity that should be used for the nth field of the index key.
+//	The mapping from character to affinity is given by the SQLITE_AFF_ macros defined in sqliteInt.h.
+//	If P4 is NULL then all index fields have the affinity NONE.
+case OP_MakeRecord:
+	//	Assuming the record contains N fields, the record format looks like this:
+	//		------------------------------------------------------------------------
+	//		| hdr-size | type 0 | type 1 | ... | type N-1 | data0 | ... | data N-1 |
+	//		------------------------------------------------------------------------
+	//
+	//	Data(0) is taken from register P1. Data(1) comes from register P1 + 1 and so froth.
+	//	Each type field is a varint representing the serial type of the corresponding data element (see VdbeSerialType()). The hdr-size field is also a varint which is the offset from the beginning of the record to data0.
+	u.ap.nData = 0						//	Number of bytes of data space
+	u.ap.nHdr = 0						//	Number of bytes of header space
+	u.ap.nZero = 0						//	Number of zero bytes at the end of the record
+	u.ap.nField = pOp.p1
+	u.ap.zAffinity = pOp.p4.z
+	assert( u.ap.nField > 0 && pOp.p2 > 0 && pOp.p2 + u.ap.nField <= p.nMem + 1 )
+	u.ap.pData0 = &aMem[u.ap.nField]
+	u.ap.nField = pOp.p2
+	u.ap.Last = &u.ap.pData0[u.ap.nField - 1]
+	u.ap.file_format = p.minWriteFileFormat
 
-  /* Identify the output register */
-  assert( pOp.p3<pOp.p1 || pOp.p3>=pOp.p1+pOp.p2 );
-  pOut = &aMem[pOp.p3];
-  memAboutToChange(p, pOut);
+	//	Identify the output register
+	assert( pOp.p3 < pOp.p1 || pOp.p3 >= pOp.p1 + pOp.p2 )
+	pOut = &aMem[pOp.p3]
+	memAboutToChange(p, pOut)
 
 	//	Loop through the elements that will make up the record to figure out how much space is required for the new record.
 	for u.ap.pRec = u.ap.pData0; u.ap.pRec <= u.ap.Last; u.ap.pRec++ {
@@ -2210,7 +2192,7 @@ case OP_MakeRecord: {
 		u.ap.serial_type = u.ap.pRec.VdbeSerialType(u.ap.file_format)
 		u.ap.len = VdbeSerialTypeLen(u.ap.serial_type)
 		u.ap.nData += u.ap.len;
-		u.ap.nHdr += sqlite3VarintLen(u.ap.serial_type)
+		u.ap.nHdr += VarintLen(u.ap.serial_type)
 		if v, ok := u.ap.pRec.(Zeroes); ok {
 			//	Only pure zero-filled BLOBs can be input to this Opcode. We do not allow blobs with a prefix and a zero-filled tail.
 			u.ap.nZero += int(v)
@@ -2219,48 +2201,45 @@ case OP_MakeRecord: {
 		}
 	}
 
-  /* Add the initial header varint and total the size */
-  u.ap.nHdr += u.ap.nVarint = sqlite3VarintLen(u.ap.nHdr);
-  if( u.ap.nVarint<sqlite3VarintLen(u.ap.nHdr) ){
-    u.ap.nHdr++;
-  }
-  if u.ap.nByte = u.ap.nHdr + u.ap.nData - u.ap.nZero; u.ap.nByte < 0 {
-    goto too_big;
-  }
+	//	Add the initial header varint and total the size
+	u.ap.nVarint = VarintLen(u.ap.nHdr)
+	u.ap.nHdr += u.ap.nVarint
+	if u.ap.nVarint < VarintLen(u.ap.nHdr) {
+		u.ap.nHdr++
+	}
+	if u.ap.nByte = u.ap.nHdr + u.ap.nData - u.ap.nZero; u.ap.nByte < 0 {
+		goto too_big
+	}
 
-  /* Make sure the output register has a buffer large enough to store
-  ** the new record. The output register (pOp.p3) is not allowed to
-  ** be one of the input registers (because the following call to
-  ** sqlite3VdbeMemGrow() could clobber the value before it is used).
-  */
-  if( sqlite3VdbeMemGrow(pOut, (int)u.ap.nByte, 0) ){
-    goto no_mem;
-  }
-  u.ap.zNewRecord = (byte *)pOut.z;
+	//	Make sure the output register has a buffer large enough to store the new record. The output register (pOp.p3) is not allowed to be one of the input registers (because the following call to sqlite3VdbeMemGrow() could clobber the value before it is used).
+	if sqlite3VdbeMemGrow(pOut, int(u.ap.nByte), 0) {
+		goto no_mem
+	}
+	u.ap.zNewRecord = ([]byte)(pOut.z)
 
-  /* Write the record */
-  u.ap.i = putVarint32(u.ap.zNewRecord, u.ap.nHdr);
-  for(u.ap.pRec=u.ap.pData0; u.ap.pRec<=u.ap.Last; u.ap.pRec++){
-    u.ap.serial_type = u.ap.pRec.VdbeSerialType(u.ap.file_format)
-    u.ap.i += putVarint32(&u.ap.zNewRecord[u.ap.i], u.ap.serial_type);      /* serial type */
-  }
-  for(u.ap.pRec=u.ap.pData0; u.ap.pRec<=u.ap.Last; u.ap.pRec++){  /* serial data */
-    u.ap.i += u.ap.pRec.VdbeSerialPut(&u.ap.zNewRecord[u.ap.i], u.ap.file_format)
-  }
-  assert( u.ap.i==u.ap.nByte );
+	//	Write the record
+	buffer := Buffer(u.ap.zNewRecord).WriteVarint32(u.ap.nHdr)
+	u.ap.i = len(u.ap.zNewRecord) - len(buffer)
+	for u.ap.pRec = u.ap.pData0; u.ap.pRec <= u.ap.Last; u.ap.pRec++ {
+		u.ap.serial_type = u.ap.pRec.VdbeSerialType(u.ap.file_format)
+		buffer := Buffer(u.ap.zNewRecord[u.ap.i:]).WriteVarint32(u.ap.serial_type)
+		u.ap.i += len(u.ap.zNewRecord[u.ap.i:]) - len(buffer)
+	}
+	for u.ap.pRec = u.ap.pData0; u.ap.pRec <= u.ap.Last; u.ap.pRec++ {					//	serial data
+		u.ap.i += u.ap.pRec.VdbeSerialPut(Buffer(u.ap.zNewRecord[u.ap.i:]), u.ap.file_format)
+	}
+	assert( u.ap.i == u.ap.nByte )
 
-  assert( pOp.p3>0 && pOp.p3<=p.nMem );
-  pOut.n = (int)u.ap.nByte;
-  pOut.flags = MEM_Blob | MEM_Dyn;
-  pOut.xDel = 0;
-  if u.ap.nZero != 0 {
-    pOut.Value = Zeroes(u.ap.nZero)
-  }
-  pOut.enc = SQLITE_UTF8;  /* In case the blob is ever converted to text */
-  REGISTER_TRACE(pOp.p3, pOut);
-  UPDATE_MAX_BLOBSIZE(pOut);
-  break;
-}
+	assert( pOp.p3 > 0 && pOp.p3 <= p.nMem )
+	pOut.n = int(u.ap.nByte)
+	pOut.flags = MEM_Blob | MEM_Dyn
+	pOut.xDel = 0
+	if u.ap.nZero != 0 {
+		pOut.Value = Zeroes(u.ap.nZero)
+	}
+	pOut.enc = SQLITE_UTF8										//	In case the blob is ever converted to text
+	REGISTER_TRACE(pOp.p3, pOut)
+	UPDATE_MAX_BLOBSIZE(pOut)
 
 /* Opcode: Count P1 P2 * * *
 **

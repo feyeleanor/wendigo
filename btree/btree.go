@@ -440,11 +440,11 @@ static void ptrmapPut(BtShared *pBt, PageNumber key, byte eType, PageNumber pare
   assert( offset <= (int)pBt.usableSize-5 );
   pPtrmap = pDbPage.GetData()
 
-  if( eType!=pPtrmap[offset] || Get4Byte(&pPtrmap[offset+1])!=parent ){
+  if eType != pPtrmap[offset] || Buffer(pPtrmap[offset + 1:]).ReadUint32() != parent {
     *pRC= rc = sqlite3PagerWrite(pDbPage);
     if( rc==SQLITE_OK ){
       pPtrmap[offset] = eType;
-      Put4Byte(&pPtrmap[offset+1], parent);
+      Buffer(pPtrmap[offset + 1:]).WriteUint32(parent)
     }
   }
 
@@ -480,7 +480,7 @@ static int ptrmapGet(BtShared *pBt, PageNumber key, byte *pEType, PageNumber *pP
   assert( offset <= (int)pBt.usableSize-5 );
   assert( pEType!=0 );
   *pEType = pPtrmap[offset];
-  if( pPageNumber ) *pPageNumber = Get4Byte(&pPtrmap[offset+1]);
+  if( pPageNumber ) *pPageNumber = Buffer(pPtrmap[offset + 1:]).ReadUint32()
 
   sqlite3PagerUnref(pDbPage);
   if( *pEType<1 || *pEType>5 ) return SQLITE_CORRUPT_BKPT;
@@ -497,7 +497,7 @@ static uint16 cellSizePtr(MemoryPage *pPage, byte *pCell){
 	buffer := pCell[pPage.childPtrSize:]
 	if pPage.intKey {
 		if pPage.hasData {
-			nSize, buffer = buffer.GetVarint32()
+			nSize, buffer = buffer.ReadVarint32()
 		} else {
 			nSize = 0
 		}
@@ -510,7 +510,7 @@ static uint16 cellSizePtr(MemoryPage *pPage, byte *pCell){
 		}
 
 	} else {
-		nSize, buffer = buffer.GetVarint32()
+		nSize, buffer = buffer.ReadVarint32()
 	}
 
 	if nSize > pPage.maxLocal {
@@ -540,7 +540,7 @@ static void ptrmapPutOvflPtr(MemoryPage *pPage, byte *pCell, int *pRC){
   &info.ParsePtr(pPage, pCell)
   assert( (info.nData+(pPage.intKey?0:info.nKey))==info.nPayload );
   if( info.iOverflow ){
-    PageNumber ovfl = Get4Byte(&pCell[info.iOverflow]);
+    PageNumber ovfl = Buffer(pCell[info.iOverflow:]).ReadUint32()
     ptrmapPut(pPage.pBt, ovfl, PTRMAP_OVERFLOW1, pPage.pgno, pRC);
   }
 }
@@ -1010,8 +1010,16 @@ static int btreeInvokeBusyHandler(void *pArg){
     }else{
       nReserve = zDbHeader[20];
       pBt.Flags |= BTS_PAGESIZE_FIXED;
-      pBt.autoVacuum = (Get4Byte(&zDbHeader[36 + 4*4])?1:0);
-      pBt.incrVacuum = (Get4Byte(&zDbHeader[36 + 7*4])?1:0);
+      if Buffer(zDbHeader[36 + (4 * 4):]).ReadUint32() != 0 {
+		  pBt.autoVacuum = true
+	  } else {
+		  pBt.autoVacuum = false
+	  }
+      if Buffer(zDbHeader[36 + (7 * 4):]).ReadUint32() != 0 {
+		  pBt.incrVacuum = true
+	  } else {
+		  pBt.incrVacuum = false
+	  }
     }
     rc = sqlite3PagerSetPagesize(pBt.pPager, &pBt.pageSize, nReserve);
     if( rc ) goto btree_open_out;
@@ -1419,7 +1427,7 @@ static int lockBtree(BtShared *pBt){
   /* Do some checking to help insure the file we opened really is
   ** a valid database file. 
   */
-  nPage = nPageHeader = Get4Byte(28+(byte*)pPage1.aData);
+  nPage = nPageHeader = Buffer(pPage1.aData[28:]).ReadUint32()
   sqlite3PagerPagecount(pBt.pPager, &nPageFile);
   if( nPage==0 || memcmp(24+(byte*)pPage1.aData, 92+(byte*)pPage1.aData,4)!=0 ){
     nPage = nPageFile;
@@ -1501,8 +1509,16 @@ static int lockBtree(BtShared *pBt){
     }
     pBt.pageSize = pageSize;
     pBt.usableSize = usableSize;
-    pBt.autoVacuum = (Get4Byte(&page1[36 + 4*4])?1:0);
-    pBt.incrVacuum = (Get4Byte(&page1[36 + 7*4])?1:0);
+    if Buffer(page1[36 + (4 * 4):]).ReadUint32() != 0 {
+		pBt.autoVacuum = true
+	} else {
+		pBt.autoVacuum = false
+	}
+    if Buffer(page1[36 + (7 * 4):]).ReadUint32() != 0 {
+		pBt.incrVacuum = true
+	} else {
+		pBt.incrVacuum = false
+	}
   }
 
   /* maxLocal is the maximum amount of payload to store locally for
@@ -1581,8 +1597,8 @@ func (pBt *BtShared) NewDatabase() (rc int) {
 			pBt.Flags |= BTS_PAGESIZE_FIXED
 			assert( pBt.autoVacuum == 1 || pBt.autoVacuum == 0 )
 			assert( pBt.incrVacuum == 1 || pBt.incrVacuum == 0 )
-			Put4Byte(&data[36 + 4*4], pBt.autoVacuum)
-			Put4Byte(&data[36 + 7*4], pBt.incrVacuum)
+			Buffer(data[36 + (4 *4 ):]).WriteUint32(pBt.autoVacuum)
+			Buffer(data[36 + (7 * 4):]).WriteUint32(pBt.incrVacuum)
 			pBt.nPage = 1
 			data[31] = 1
 		}
@@ -1727,10 +1743,10 @@ func (pBt *BtShared) NewDatabase() (rc int) {
       ** re-read the database size from page 1 if a savepoint or transaction
       ** rollback occurs within the transaction.
       */
-      if( pBt.nPage!=Get4Byte(&pPage1.aData[28]) ){
+      if pBt.nPage != Buffer(pPage1.aData[28:]).ReadUint32() {
         rc = sqlite3PagerWrite(pPage1.pDbPage);
         if( rc==SQLITE_OK ){
-          Put4Byte(&pPage1.aData[28], pBt.nPage);
+          Buffer(pPage1.aData[28:]).WriteUint32(pBt.nPage)
         }
       }
     }
@@ -1774,13 +1790,13 @@ static int setChildPtrmaps(MemoryPage *pPage){
     pCell := pPage.FindCell(i)
     ptrmapPutOvflPtr(pPage, pCell, &rc);
     if( !pPage.leaf ){
-      PageNumber childPageNumber = Get4Byte(pCell);
+      PageNumber childPageNumber = Buffer(pCell).ReadUint32()
       ptrmapPut(pBt, childPageNumber, PTRMAP_BTREE, pgno, &rc);
     }
   }
 
   if( !pPage.leaf ){
-    PageNumber childPageNumber = Get4Byte(&pPage.aData[pPage.hdrOffset+8]);
+    PageNumber childPageNumber = Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
     ptrmapPut(pBt, childPageNumber, PTRMAP_BTREE, pgno, &rc);
   }
 
@@ -1806,10 +1822,10 @@ set_child_ptrmaps_out:
 static int modifyPagePointer(MemoryPage *pPage, PageNumber iFrom, PageNumber iTo, byte eType){
   if( eType==PTRMAP_OVERFLOW2 ){
     /* The pointer is always the first 4 bytes of the page in this case.  */
-    if( Get4Byte(pPage.aData)!=iFrom ){
+    if Buffer(pPage.aData).ReadUint32() != iFrom {
       return SQLITE_CORRUPT_BKPT;
     }
-    Put4Byte(pPage.aData, iTo);
+    Buffer(pPage.aData).WriteUint32(iTo)
   }else{
     byte isInitOrig = pPage.isInit;
     int i;
@@ -1823,27 +1839,23 @@ static int modifyPagePointer(MemoryPage *pPage, PageNumber iFrom, PageNumber iTo
       if( eType==PTRMAP_OVERFLOW1 ){
         info	CellInfo
         info.ParsePtr(pPage, pCell)
-        if( info.iOverflow
-         && pCell+info.iOverflow+3<=pPage.aData+pPage.maskPage
-         && iFrom==Get4Byte(&pCell[info.iOverflow])
-        ){
-          Put4Byte(&pCell[info.iOverflow], iTo);
+        if info.iOverflow != 0 && (pCell + info.iOverflow + 3) <= (pPage.aData + pPage.maskPage) && iFrom == Buffer(pCell[info.iOverflow:]).ReadUint32() {
+          Buffer(pCell[info.iOverflow:]).WriteUint32(iTo)
           break;
         }
       }else{
-        if( Get4Byte(pCell)==iFrom ){
-          Put4Byte(pCell, iTo);
+        if Buffer(pCell).ReadUint32() == iFrom {
+          Buffer(pCell).WriteUint32(iTo)
           break;
         }
       }
     }
   
     if( i==nCell ){
-      if( eType!=PTRMAP_BTREE || 
-          Get4Byte(&pPage.aData[pPage.hdrOffset+8])!=iFrom ){
+      if eType != PTRMAP_BTREE || Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32() != iFrom {
         return SQLITE_CORRUPT_BKPT;
       }
-      Put4Byte(&pPage.aData[pPage.hdrOffset+8], iTo);
+      Buffer(pPage.aData[pPage.hdrOffset + 8:]).WriteUint32(iTo)
     }
 
     pPage.isInit = isInitOrig;
@@ -1898,7 +1910,7 @@ static int relocatePage(
       return rc;
     }
   }else{
-    PageNumber nextOvfl = Get4Byte(pDbPage.aData);
+    PageNumber nextOvfl = Buffer(pDbPage.aData).ReadUint32()
     if( nextOvfl!=0 ){
       ptrmapPut(pBt, nextOvfl, PTRMAP_OVERFLOW2, iFreePage, &rc);
       if( rc!=SQLITE_OK ){
@@ -1960,7 +1972,7 @@ static int incrVacuumStep(BtShared *pBt, PageNumber nFin, PageNumber iLastPg){
     byte eType;
     PageNumber iPtrPage;
 
-    nFreeList = Get4Byte(&pBt.pPage1.aData[36]);
+    nFreeList = Buffer(pBt.pPage1.aData[36:]).ReadUint32()
     if( nFreeList==0 ){
       return SQLITE_DONE;
     }
@@ -2069,7 +2081,7 @@ static int incrVacuumStep(BtShared *pBt, PageNumber nFin, PageNumber iLastPg){
     rc = incrVacuumStep(pBt, 0, btreePagecount(pBt));
     if( rc==SQLITE_OK ){
       rc = sqlite3PagerWrite(pBt.pPage1.pDbPage);
-      Put4Byte(&pBt.pPage1.aData[28], pBt.nPage);
+      Buffer(pBt.pPage1.aData[28:]).WriteUint32(pBt.nPage)
     }
   }
   p.Unlock()
@@ -2109,7 +2121,7 @@ static int autoVacuumCommit(BtShared *pBt){
       return SQLITE_CORRUPT_BKPT;
     }
 
-    nFree = Get4Byte(&pBt.pPage1.aData[36]);
+    nFree = Buffer(pBt.pPage1.aData[36:]).ReadUint32()
     nEntry = pBt.usableSize/5;
     nPtrmap = (nFree-nOrig+ptrmapPageno(pBt, nOrig)+nEntry)/nEntry;
     nFin = nOrig - nFree - nPtrmap;
@@ -2126,9 +2138,9 @@ static int autoVacuumCommit(BtShared *pBt){
     }
     if( (rc==SQLITE_DONE || rc==SQLITE_OK) && nFree>0 ){
       rc = sqlite3PagerWrite(pBt.pPage1.pDbPage);
-      Put4Byte(&pBt.pPage1.aData[32], 0);
-      Put4Byte(&pBt.pPage1.aData[36], 0);
-      Put4Byte(&pBt.pPage1.aData[28], nFin);
+      Buffer(pBt.pPage1.aData[32:]).WriteUint32(0)
+      Buffer(pBt.pPage1.aData[36:]).WriteUint32(0)
+      Buffer(pBt.pPage1.aData[28:]).WriteUint32(nFin)
       sqlite3PagerTruncateImage(pBt.pPager, nFin);
       pBt.nPage = nFin;
     }
@@ -2346,9 +2358,9 @@ func (p *Btree) Rollback(tripCode int) (rc int) {
 			rc = rc2
 		}
 
-		//	The rollback may have destroyed the pPage1.aData value. So call .GetPageAndInitialize(() on page 1 again to make sure pPage1.aData is set correctly.
+		//	The rollback may have destroyed the pPage1.aData value. So call .GetPageAndInitialize() on page 1 again to make sure pPage1.aData is set correctly.
 		if pPage1, rc = pBt.GetPage(1, false); rc == SQLITE_OK {
-			nPage := Get4Byte(28+(byte*)pPage1.aData)
+			nPage := Buffer(pPage1.aData[28:]).ReadUint32()
 			if nPage == 0 {
 				sqlite3PagerPagecount(pBt.pPager, &nPage)
 			}
@@ -2415,7 +2427,7 @@ func (p *Btree) Savepoint(op, iSavepoint int) (rc int) {
 				pBt.nPage = 0
 			}
 			rc = pBt.NewDatabase()
-			pBt.nPage = Get4Byte(28 + pBt.pPage1.aData)
+			pBt.nPage = Buffer(pBt.pPage1.aData[28:]).ReadUint32()
 
 			//	The database size was written into the offset 28 of the header when the transaction started, so we know that the value at offset 28 is nonzero.
 			assert( pBt.nPage > 0 )
@@ -2716,7 +2728,7 @@ static int getOverflowPage(
     pPage, rc = pBt.GetPage(ovfl, false)
     assert( rc==SQLITE_OK || pPage==0 );
     if rc == SQLITE_OK {
-      next = Get4Byte(pPage.aData);
+      next = Buffer(pPage.aData).ReadUint32()
     }
   }
 
@@ -2834,7 +2846,7 @@ static int accessPayload(
     const uint32 ovflSize = pBt.usableSize - 4;  /* Bytes content per ovfl page */
     PageNumber nextPage;
 
-    nextPage = Get4Byte(&aPayload[pCur.CellInfo.nLocal]);
+    nextPage = Buffer(aPayload[pCur.CellInfo.nLocal:]).ReadUint32()
 
     /* If the isIncrblobHandle flag is set and the Cursor.OverflowCache[]
     ** has not been allocated, allocate it now. The array is sized at
@@ -2918,7 +2930,7 @@ static int accessPayload(
           byte *aWrite = &pBuf[-4];
           memcpy(aSave, aWrite, 4);
           rc = sqlite3OsRead(fd, aWrite, a+4, (int64)pBt.pageSize*(nextPage-1));
-          nextPage = Get4Byte(aWrite);
+          nextPage = Buffer(aWrite).ReadUint32()
           memcpy(aWrite, aSave, 4);
         }else
 #endif
@@ -2927,7 +2939,7 @@ static int accessPayload(
           DbPage *pDbPage;
           if pDbPage, rc = pBt.pPager.Acquire(nextPage, false); rc == SQLITE_OK {
             aPayload = pDbPage.GetData()
-            nextPage = Get4Byte(aPayload);
+            nextPage = Buffer(aPayload).ReadUint32()
             rc = copyPayload(&aPayload[offset+4], pBuf, a, eOp, pDbPage);
             sqlite3PagerUnref(pDbPage);
             offset = 0;
@@ -3178,7 +3190,7 @@ static int moveToRoot(Cursor *pCur){
   if( pRoot.nCell==0 && !pRoot.leaf ){
     PageNumber subpage;
     if( pRoot.pgno!=1 ) return SQLITE_CORRUPT_BKPT;
-    subpage = Get4Byte(&pRoot.aData[pRoot.hdrOffset+8]);
+    subpage = Buffer(pRoot.aData[pRoot.hdrOffset + 8:]).ReadUint32()
     pCur.eState = CURSOR_VALID;
     rc = pCur.MoveToChild(subpage);
   }else{
@@ -3202,7 +3214,7 @@ static int moveToLeftmost(Cursor *pCur){
   assert( pCur.eState==CURSOR_VALID );
   while( rc==SQLITE_OK && !(pPage = pCur.Pages[pCur.iPage]).leaf ){
     assert( pCur.aiIdx[pCur.iPage]<pPage.nCell );
-    pgno = Get4Byte(pPage.FindCell(pCur.aiIdx[pCur.iPage]))
+    pgno = Buffer(pPage.FindCell(pCur.aiIdx[pCur.iPage:])).ReadUint32()
     rc = pCur.MoveToChild(pgno);
   }
   return rc;
@@ -3225,7 +3237,7 @@ static int moveToRightmost(Cursor *pCur){
 
   assert( pCur.eState==CURSOR_VALID );
   while( rc==SQLITE_OK && !(pPage = pCur.Pages[pCur.iPage]).leaf ){
-    pgno = Get4Byte(&pPage.aData[pPage.hdrOffset+8]);
+    pgno = Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
     pCur.aiIdx[pCur.iPage] = pPage.nCell;
     rc = pCur.MoveToChild(pgno);
   }
@@ -3340,9 +3352,9 @@ func (pCur *Cursor) BtreeMovetoUnpacked(indexKey *UnpackedRecord, tableKey int64
 			pCell := Buffer(pPage.FindCell(idx)[pPage.childPtrSize:])
 			if pPage.intKey {
 				if pPage.hasData {
-					_, pCell = pCell.GetVarint32()
+					_, pCell = pCell.ReadVarint32()
 				}
-				nCellKey, _ := pCell.GetVarint64()
+				nCellKey, _ := pCell.ReadVarint64()
 				switch {
 				case nCellKey == tableKey:
 					c = 0
@@ -3400,9 +3412,9 @@ func (pCur *Cursor) BtreeMovetoUnpacked(indexKey *UnpackedRecord, tableKey int64
 		if pPage.leaf {
 			chldPg = 0
 		} else if lwr >= pPage.nCell  {
-			chldPg = Get4Byte(&pPage.aData[pPage.hdrOffset + 8])
+			chldPg = Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
 		} else {
-			chldPg = Get4Byte(pPage.FindCell(lwr))
+			chldPg = Buffer(pPage.FindCell(lwr)).ReadUint32()
 		}
 		if chldPg == 0 {
 			assert( pCur.aiIdx[pCur.iPage] < pCur.Pages[pCur.iPage].nCell )
@@ -3477,7 +3489,7 @@ moveto_finish:
   pCur.validNKey = 0;
   if( idx>=pPage.nCell ){
     if( !pPage.leaf ){
-      rc = pCur.MoveToChild(Get4Byte(&pPage.aData[pPage.hdrOffset+8]));
+      rc = pCur.MoveToChild(Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32())
       if( rc ) return rc;
       rc = moveToLeftmost(pCur);
       *pRes = 0;
@@ -3539,7 +3551,7 @@ moveto_finish:
   assert( pPage.isInit );
   if( !pPage.leaf ){
     int idx = pCur.aiIdx[pCur.iPage];
-    if rc = pCur.MoveToChild(Get4Byte(pPage.FindCell(idx))); rc != SQLITE_OK {
+    if rc = pCur.MoveToChild(Buffer(pPage.FindCell(idx)).ReadUint32()); rc != SQLITE_OK {
       return rc;
     }
     rc = moveToRightmost(pCur);
@@ -3605,7 +3617,7 @@ static int allocateBtreePage(
 
   pPage1 = pBt.pPage1;
   mxPage = btreePagecount(pBt);
-  n = Get4Byte(&pPage1.aData[36]);
+  n = Buffer(pPage1.aData[36:]).ReadUint32()
   if( n>=mxPage ){
     return SQLITE_CORRUPT_BKPT;
   }
@@ -3635,7 +3647,7 @@ static int allocateBtreePage(
     */
     rc = sqlite3PagerWrite(pPage1.pDbPage);
     if( rc ) return rc;
-    Put4Byte(&pPage1.aData[36], n-1);
+    Buffer(pPage1.aData[36:]).WriteUint32(n - 1)
 
     /* The code within this loop is run only once if the 'searchList' variable
     ** is not true. Otherwise, it runs once for each trunk-page on the
@@ -3644,9 +3656,9 @@ static int allocateBtreePage(
     do {
       pPrevTrunk = pTrunk;
       if( pPrevTrunk ){
-        iTrunk = Get4Byte(&pPrevTrunk.aData[0]);
+        iTrunk = Buffer(pPrevTrunk.aData[0:]).ReadUint32()
       }else{
-        iTrunk = Get4Byte(&pPage1.aData[32]);
+        iTrunk = Buffer(pPage1.aData[32:]).ReadUint32()
       }
       if( iTrunk>mxPage ){
         rc = SQLITE_CORRUPT_BKPT
@@ -3660,7 +3672,7 @@ static int allocateBtreePage(
       assert( pTrunk!=0 );
       assert( pTrunk.aData!=0 );
 
-      k = Get4Byte(&pTrunk.aData[4]); /* # of leaves on this trunk page */
+      k = Buffer(pTrunk.aData[4:]).ReadUint32()		//	# of leaves on this trunk page
       if( k==0 && !searchList ){
         /* The trunk has no leaves and the list is not being searched. 
         ** So extract the trunk page itself and use it as the newly 
@@ -3705,7 +3717,7 @@ static int allocateBtreePage(
           ** page in this case.
           */
           MemoryPage *pNewTrunk;
-          PageNumber iNewTrunk = Get4Byte(&pTrunk.aData[8]);
+          PageNumber iNewTrunk = Buffer(pTrunk.aData[8:]).ReadUint32()
           if( iNewTrunk>mxPage ){ 
             rc = SQLITE_CORRUPT_BKPT;
             goto end_allocate_page;
@@ -3719,17 +3731,17 @@ static int allocateBtreePage(
             goto end_allocate_page;
           }
           memcpy(&pNewTrunk.aData[0], &pTrunk.aData[0], 4);
-          Put4Byte(&pNewTrunk.aData[4], k-1);
+          Buffer(pNewTrunk.aData[4:]).WriteUint32(k - 1)
           memcpy(&pNewTrunk.aData[8], &pTrunk.aData[12], (k-1)*4);
           pNewTrunk.Release()
           if( !pPrevTrunk ){
-            Put4Byte(&pPage1.aData[32], iNewTrunk);
+            Buffer(pPage1.aData[32:]).WriteUint32(iNewTrunk)
           }else{
             rc = sqlite3PagerWrite(pPrevTrunk.pDbPage);
             if( rc ){
               goto end_allocate_page;
             }
-            Put4Byte(&pPrevTrunk.aData[0], iNewTrunk);
+            Buffer(pPrevTrunk.aData).WriteUint32(iNewTrunk)
           }
         }
         pTrunk = 0;
@@ -3742,9 +3754,9 @@ static int allocateBtreePage(
           uint32 i;
           int dist;
           closest = 0;
-          dist = sqlite3AbsInt32(Get4Byte(&aData[8]) - nearby);
+          dist = sqlite3AbsInt32(Buffer(aData[8:]).ReadUint32() - nearby)
           for(i=1; i<k; i++){
-            int d2 = sqlite3AbsInt32(Get4Byte(&aData[8+i*4]) - nearby);
+            int d2 = sqlite3AbsInt32(Buffer(aData[8 + (i * 4):]).ReadUint32() - nearby)
             if( d2<dist ){
               closest = i;
               dist = d2;
@@ -3754,7 +3766,7 @@ static int allocateBtreePage(
           closest = 0;
         }
 
-        iPage = Get4Byte(&aData[8+closest*4]);
+        iPage = Buffer(aData[8 + (closest * 4):]).ReadUint32()
         if( iPage>mxPage ){
           rc = SQLITE_CORRUPT_BKPT;
           goto end_allocate_page;
@@ -3767,7 +3779,7 @@ static int allocateBtreePage(
           if( closest<k-1 ){
             memcpy(&aData[8+closest*4], &aData[4+k*4], 4);
           }
-          Put4Byte(&aData[4], k-1);
+          Buffer(aData[4:]).WriteUint32(k - 1)
           noContent = !btreeGetHasContent(pBt, *pPageNumber);
           if ppPage, rc = pBt.GetPage(*pPageNumber, noContent); rc == SQLITE_OK {
             rc = sqlite3PagerWrite((*ppPage).pDbPage);
@@ -3804,7 +3816,7 @@ static int allocateBtreePage(
       pBt.nPage++;
       if( pBt.nPage==PAGER_MJ_PGNO(pBt) ){ pBt.nPage++; }
     }
-    Put4Byte(28 + (byte*)pBt.pPage1.aData, pBt.nPage);
+    Buffer(pBt.pPage1.aData[28:]).WriteUint32(pBt.nPage)
     *pPageNumber = pBt.nPage;
 
     assert( *pPageNumber!=PAGER_MJ_PGNO(pBt) );
@@ -3868,8 +3880,8 @@ static int freePage2(BtShared *pBt, MemoryPage *pMemoryPage, PageNumber iPage){
   /* Increment the free page count on pPage1 */
   rc = sqlite3PagerWrite(pPage1.pDbPage);
   if( rc ) goto freepage_out;
-  nFree = Get4Byte(&pPage1.aData[36]);
-  Put4Byte(&pPage1.aData[36], nFree+1);
+  nFree = Buffer(pPage1.aData[36:]).ReadUint32()
+  Buffer(pPage1.aData[36:]).WriteUint32(nFree + 1)
 
 	if pBt.Flags & BTS_SECURE_DELETE {
 		//	If the secure_delete option is enabled, then always fully overwrite deleted information with zeros.
@@ -3902,13 +3914,13 @@ static int freePage2(BtShared *pBt, MemoryPage *pMemoryPage, PageNumber iPage){
   if( nFree!=0 ){
     uint32 nLeaf;                /* Initial number of leaf cells on trunk page */
 
-    iTrunk = Get4Byte(&pPage1.aData[32]);
+    iTrunk = Buffer(pPage1.aData[32:]).ReadUint32()
     pTrunk, rc = pBt.GetPage(iTrunk, false)
     if( rc!=SQLITE_OK ){
       goto freepage_out;
     }
 
-    nLeaf = Get4Byte(&pTrunk.aData[4]);
+    nLeaf = Buffer(pTrunk.aData[4:]).ReadUint32()
     assert( pBt.usableSize>32 );
     if( nLeaf > (uint32)pBt.usableSize/4 - 2 ){
       rc = SQLITE_CORRUPT_BKPT;
@@ -3931,8 +3943,8 @@ static int freePage2(BtShared *pBt, MemoryPage *pMemoryPage, PageNumber iPage){
       */
       rc = sqlite3PagerWrite(pTrunk.pDbPage);
       if( rc==SQLITE_OK ){
-        Put4Byte(&pTrunk.aData[4], nLeaf+1);
-        Put4Byte(&pTrunk.aData[8+nLeaf*4], iPage);
+        Buffer(pTrunk.aData[4:]).WriteUint32(nLeaf + 1)
+        Buffer(pTrunk.aData[8 + (nLeaf * 4):]).WriteUint32(iPage)
         if( pPage && (pBt.Flags & BTS_SECURE_DELETE)==0 ){
           sqlite3PagerDontWrite(pPage.pDbPage);
         }
@@ -3954,9 +3966,9 @@ static int freePage2(BtShared *pBt, MemoryPage *pMemoryPage, PageNumber iPage){
   if( rc!=SQLITE_OK ){
     goto freepage_out;
   }
-  Put4Byte(pPage.aData, iTrunk);
-  Put4Byte(&pPage.aData[4], 0);
-  Put4Byte(&pPage1.aData[32], iPage);
+  Buffer(pPage.aData).WriteUint32(iTrunk)
+  Buffer(pPage.aData[4:]).WriteUint32(0)
+  Buffer(pPage1.aData[32:]).WriteUint32(iPage)
 
 freepage_out:
   if( pPage ){
@@ -3990,7 +4002,7 @@ static int clearCell(MemoryPage *pPage, unsigned char *pCell){
   if( pCell+info.iOverflow+3 > pPage.aData+pPage.maskPage ){
     return SQLITE_CORRUPT;  /* Cell extends past end of page */
   }
-  ovflPageNumber = Get4Byte(&pCell[info.iOverflow]);
+  ovflPageNumber = Buffer(pCell[info.iOverflow:]).ReadUint32()
   assert( pBt.usableSize > 4 );
   ovflPageSize = pBt.usableSize - 4;
   nOvfl = (info.nPayload - info.nLocal + ovflPageSize - 1)/ovflPageSize;
@@ -4069,11 +4081,12 @@ static int fillInCell(
     nHeader += 4;
   }
   if( pPage.hasData ){
-    nHeader += putVarint(&pCell[nHeader], nData+nZero);
+    nHeader += len(pCell[nHeader:]) - len(Buffer(pCell[nHeader:]).WriteVarint64(nData + nZero))
   }else{
-    nData = nZero = 0;
+	nZero = 0
+    nData = 0
   }
-  nHeader += putVarint(&pCell[nHeader], *(uint64*)&nKey);
+  nHeader += len(pCell[nHeader:]) - len(Buffer(pCell[nHeader:]).WriteVarint64(nKey))
   info.ParsePtr(pPage, pCell)
   assert( info.nHeader==nHeader );
   assert( info.nKey==nKey );
@@ -4139,11 +4152,11 @@ static int fillInCell(
       ** is still writeable */
       assert( pPrior<pPage.aData || pPrior>=&pPage.aData[pBt.pageSize] );
 
-      Put4Byte(pPrior, pgnoOvfl);
+      Buffer(pPrior).WriteUint32(pgnoOvfl)
       pToRelease.Release()
       pToRelease = pOvfl;
       pPrior = pOvfl.aData;
-      Put4Byte(pPrior, 0);
+      Buffer(pPrior).WriteUint32(0)
       pPayload = &pOvfl.aData[4];
       spaceLeft = pBt.usableSize - 4;
     }
@@ -4270,7 +4283,7 @@ static void insertCell(
       pCell = pTemp;
     }
     if( iChild ){
-      Put4Byte(pCell, iChild);
+      Buffer(pCell).WriteUint32(iChild)
     }
     j = pPage.nOverflow++;
     assert( j<(int)(sizeof(pPage.apOvfl)/sizeof(pPage.apOvfl[0])) );
@@ -4296,7 +4309,7 @@ static void insertCell(
     pPage.nFree -= (uint16)(2 + sz);
     memcpy(&data[idx+nSkip], pCell+nSkip, sz-nSkip);
     if( iChild ){
-      Put4Byte(&data[idx], iChild);
+      Buffer(data[idx:]).WriteUint32(iChild)
     }
     ptr = &data[end];
     endPtr = &data[ins];
@@ -4451,7 +4464,7 @@ static int balance_quick(MemoryPage *pParent, MemoryPage *pPage, byte *pSpace){
     insertCell(pParent, pParent.nCell, pSpace, (int)(pOut-pSpace), 0, pPage.pgno, &rc);
 
     /* Set the right-child pointer of pParent to point to the new page. */
-    Put4Byte(&pParent.aData[pParent.hdrOffset+8], pgnoNew);
+    Buffer(pParent.aData[pParent.hdrOffset + 8:]).WriteUint32(pgnoNew)
   
     /* Release the reference to the new page. */
     pNew.Release()
@@ -4578,7 +4591,7 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 	} else {
 		pRight = pParent.FindCell(i + nxDiv - pParent.nOverflow)
 	}
-	pgno := PageNumber(Get4Byte(pRight))
+	pgno := PageNumber(Buffer(pRight).ReadUint32())
 	for {
 		apOld[i], rc = pBt.GetPageAndInitialize(pgno)
 		if rc != SQLITE_OK {
@@ -4591,12 +4604,12 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 
 		if i + nxDiv == pParent.aiOvfl[0] && pParent.nOverflow {
 			apDiv[i] = pParent.apOvfl[0]
-			pgno = PageNumber(Get4Byte(apDiv[i]))
+			pgno = PageNumber(Buffer(apDiv[i:]).ReadUint32())
 			szNew[i] = cellSizePtr(pParent, apDiv[i])
 			pParent.nOverflow = 0
 		} else {
 			apDiv[i] = pParent.FindCell(i + nxDiv - pParent.nOverflow)
-			pgno = PageNumber(Get4Byte(apDiv[i]))
+			pgno = PageNumber(Buffer(apDiv[i:]).ReadUint32())
 			szNew[i] = cellSizePtr(pParent, apDiv[i])
 
 			//	Drop the cell from the parent page. apDiv[i] still points to the cell within the parent, even though it has been dropped. This is safe because dropping a cell only overwrites the first four bytes of it, and this function does not need the first four bytes of the divider cell. So the pointer is safe to use later on.  
@@ -4816,7 +4829,7 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 		}
 	}
 
-	Put4Byte(pRight, apNew[nNew - 1].pgno)
+	Buffer(pRight).WriteUint32(apNew[nNew - 1].pgno)
 
 	//	Evenly distribute the data in apCell[] across the new pages. Insert divider cells into pParent as necessary.
 	j = 0
@@ -4849,7 +4862,7 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 				j--
 				info.ParsePtr(pNew, apCell[j])
 				pCell = pTemp
-				sz = 4 + putVarint(&pCell[4], info.nKey)
+				sz = 4 + len(pCell[4:]) - len(Buffer(pCell[4:]).WriteVarint64(info.nKey))
 				pTemp = 0
 			} else {
 				pCell -= 4
@@ -4940,7 +4953,7 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 			//	If the cell was originally divider cell (and is not now) or an overflow cell, or if the cell was located on a different sibling page before the balancing, then the pointer map entries associated with any child or overflow pages need to be updated.
 			if isDivider || pOld.pgno != pNew.pgno {
 				if !leafCorrection {
-					ptrmapPut(pBt, Get4Byte(apCell[i]), PTRMAP_BTREE, pNew.pgno, &rc)
+					ptrmapPut(pBt, Buffer(apCell[i:]).ReadUint32(), PTRMAP_BTREE, pNew.pgno, &rc)
 				}
 				if szCell[i] > pNew.minLocal {
 					ptrmapPutOvflPtr(pNew, apCell[i], &rc)
@@ -4950,7 +4963,7 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 
 		if !leafCorrection {
 			for i = 0; i < nNew; i++ {
-				uint32 key = Get4Byte(&apNew[i].aData[8])
+				uint32 key = Buffer(apNew[i].aData[8:]).ReadUint32()
 				ptrmapPut(pBt, key, PTRMAP_BTREE, apNew[i].pgno, &rc)
 			}
 		}
@@ -5026,7 +5039,7 @@ static int balance_deeper(MemoryPage *pRoot, MemoryPage **ppChild){
 
   /* Zero the contents of pRoot. Then install pChild as the right-child. */
   zeroPage(pRoot, pChild.aData[0] & ~PTF_LEAF);
-  Put4Byte(&pRoot.aData[pRoot.hdrOffset+8], pgnoChild);
+  Buffer(pRoot.aData[pRoot.hdrOffset + 8:]).WriteUint32(pgnoChild)
 
   *ppChild = pChild;
   return SQLITE_OK;
@@ -5353,14 +5366,14 @@ static int clearDatabasePage(
   for(i=0; i<pPage.nCell; i++){
     pCell = pPage.FindCell(i)
     if( !pPage.leaf ){
-      rc = clearDatabasePage(pBt, Get4Byte(pCell), 1, pnChange);
+      rc = clearDatabasePage(pBt, Buffer(pCell).ReadUint32(), 1, pnChange)
       if( rc ) goto cleardatabasepage_out;
     }
     rc = clearCell(pPage, pCell);
     if( rc ) goto cleardatabasepage_out;
   }
   if( !pPage.leaf ){
-    rc = clearDatabasePage(pBt, Get4Byte(&pPage.aData[8]), 1, pnChange);
+    rc = clearDatabasePage(pBt, Buffer(pPage.aData[8:]).ReadUint32(), 1, pnChange);
     if( rc ) goto cleardatabasepage_out;
   }else if( pnChange ){
     assert( pPage.intKey );
@@ -5551,7 +5564,7 @@ static int btreeDropTable(Btree *p, PageNumber iTable, int *piMoved){
   assert( pBt.pPage1 );
   assert( idx>=0 && idx<=15 );
 
-  *pMeta = Get4Byte(&pBt.pPage1.aData[36 + idx*4]);
+  *pMeta = Buffer(pBt.pPage1.aData[36 + (idx * 4):]).ReadUint32()
   p.Unlock()
 }
 
@@ -5570,7 +5583,7 @@ static int btreeDropTable(Btree *p, PageNumber iTable, int *piMoved){
   pP1 = pBt.pPage1.aData;
   rc = sqlite3PagerWrite(pBt.pPage1.pDbPage);
   if( rc==SQLITE_OK ){
-    Put4Byte(&pP1[36 + idx*4], iMeta);
+    Buffer(pP1[36 + (idx * 4):]).WriteUint32(iMeta)
     if( idx==BTREE_INCR_VACUUM ){
       assert( pBt.autoVacuum || iMeta==0 );
       assert( iMeta==0 || iMeta==1 );
@@ -5644,9 +5657,9 @@ static int btreeDropTable(Btree *p, PageNumber iTable, int *piMoved){
     */
     iIdx = pCur.aiIdx[pCur.iPage];
     if( iIdx==pPage.nCell ){
-      rc = pCur.MoveToChild(Get4Byte(&pPage.aData[pPage.hdrOffset+8]));
+      rc = pCur.MoveToChild(Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32())
     }else{
-      rc = pCur.MoveToChild(Get4Byte(pPage.FindCell(iIdx)))
+      rc = pCur.MoveToChild(Buffer(pPage.FindCell(iIdx)).ReadUint32())
     }
   }
 
@@ -5779,7 +5792,7 @@ static void checkList(
     }
     pOvflData = pOvflPage.GetData()
     if( isFreeList ){
-      int n = Get4Byte(&pOvflData[4]);
+      int n = Buffer(pOvflData[4:]).ReadUint32()
       if( pCheck.pBt.autoVacuum ){
         checkPtrmap(pCheck, iPage, PTRMAP_FREEPAGE, 0, zContext);
       }
@@ -5789,7 +5802,7 @@ static void checkList(
         N--;
       }else{
         for(i=0; i<n; i++){
-          PageNumber iFreePage = Get4Byte(&pOvflData[8+i*4]);
+          PageNumber iFreePage = Buffer(pOvflData[8 + (i * 4):]).ReadUint32()
           if( pCheck.pBt.autoVacuum ){
             checkPtrmap(pCheck, iFreePage, PTRMAP_FREEPAGE, 0, zContext);
           }
@@ -5804,11 +5817,11 @@ static void checkList(
       ** the following page matches iPage.
       */
       if( pCheck.pBt.autoVacuum && N>0 ){
-        i = Get4Byte(pOvflData);
+        i = Buffer(pOvflData).ReadUint32()
         checkPtrmap(pCheck, i, PTRMAP_OVERFLOW2, iPage, zContext);
       }
     }
-    iPage = Get4Byte(pOvflData);
+    iPage = Buffer(pOvflData).ReadUint32()
     sqlite3PagerUnref(pOvflPage);
   }
 }
@@ -5894,7 +5907,7 @@ static int checkTreePage(
     assert( sz==info.nPayload );
     if (sz>info.nLocal) && (&pCell[info.iOverflow]<=&pPage.aData[pBt.usableSize]) {
       int nPage = (sz - info.nLocal + usableSize - 5)/(usableSize - 4);
-      PageNumber pgnoOvfl = Get4Byte(&pCell[info.iOverflow]);
+      PageNumber pgnoOvfl = Buffer(pCell[info.iOverflow:]).ReadUint32()
       if( pBt.autoVacuum ){
         checkPtrmap(pCheck, pgnoOvfl, PTRMAP_OVERFLOW1, iPage, zContext);
       }
@@ -5903,7 +5916,7 @@ static int checkTreePage(
 
     //	Check sanity of left child page.
     if( !pPage.leaf ){
-      pgno = Get4Byte(pCell);
+      pgno = Buffer(pCell).ReadUint32()
       if( pBt.autoVacuum ){
         checkPtrmap(pCheck, pgno, PTRMAP_BTREE, iPage, zContext);
       }
@@ -5916,7 +5929,7 @@ static int checkTreePage(
   }
 
   if( !pPage.leaf ){
-    pgno = Get4Byte(&pPage.aData[pPage.hdrOffset+8]);
+    pgno = Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
     Context = fmt.Sprintf("On page %v at right child: ", iPage);
     if( pBt.autoVacuum ){
       checkPtrmap(pCheck, pgno, PTRMAP_BTREE, iPage, zContext);
@@ -6044,7 +6057,7 @@ func sqlite3BtreeIntegrityCheck(p *Btree, aRoot *int,		//	An array of root pages
 	check.errMsg.useMalloc = 2;
 
 	//	Check the integrity of the freelist
-	checkList(check, 1, Get4Byte(&btree.pPage1.aData[32]), Get4Byte(&btree.pPage1.aData[36]), "Main freelist: ")
+	checkList(check, 1, Buffer(btree.pPage1.aData[32:]).ReadUint32(), Buffer(btree.pPage1.aData[36:]).ReadUint32(), "Main freelist: ")
 
 	//	Check all the tables.
 	for i := 0; i < nRoot && check.maxErr; i++ {

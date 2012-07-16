@@ -29,17 +29,17 @@ func (p *CellInfo) ParsePtr(page *MemoryPage, cell Buffer) {
 	assert(n == 4 - 4 * page.leaf)
 	if page.intKey {
 		if page.hasData {
-			payload, buf = Buffer(cell[n:]).GetVarint32()
+			payload, buf = Buffer(cell[n:]).ReadVarint32()
 			n += len(buf) - len(cell[n:])
 		} else {
 			payload = 0
 		}
-		p.Key, buf = Buffer(p[n:]).GetVarint64()
+		p.Key, buf = Buffer(p[n:]).ReadVarint64()
 		n += len(buf) - len(p[n:])
 		p.Data = payload
 	} else {
 		p.Data = 0
-		payload, buf = Buffer(cell[n:]).GetVarint32()
+		payload, buf = Buffer(cell[n:]).ReadVarint32()
 		n += len(buf) - len(cell[n:])
 		p.Key = payload
 	}

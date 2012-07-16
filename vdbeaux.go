@@ -1956,12 +1956,12 @@ void sqlite3VdbeRecordUnpack(
 	p.flags := 0
 	assert( EIGHT_BYTE_ALIGNMENT(pMem) )
 	var szHdr	uint32
-	szHdr, buffer := aKey.GetVarint32()
+	szHdr, buffer := aKey.ReadVarint32()
 	idx := len(aKey) - len(buffer)
 	d := szHdr
 	u := 0
 	for ; idx < szHdr && u < p.nField && d <= nKey; {
-		serial_type, buffer := aKey[idx:].GetVarint32()
+		serial_type, buffer := aKey[idx:].ReadVarint32()
 		idx += len(aKey[idx]) - len(buffer)
 		pMem.enc = pKeyInfo.enc
 		pMem.db = pKeyInfo.db
@@ -1983,13 +1983,13 @@ func VdbeRecordCompare(pKey1 Buffer, pPKey2 *UnpackedRecord) (rc int) {
 	pKeyInfo := pPKey2.pKeyInfo
 	mem1 := &Mem{ enc: pKeyInfo.enc, db: pKeyInfo.db }
 
-	szHdr1, buf := aKey1.GetVarint32()
+	szHdr1, buf := aKey1.ReadVarint32()
 	iudx1 := len(nKey1) - len(buf)
 	d1 := szHdr1
 	nField := pKeyInfo.nField;
 	for i := 0; idx1 < szHdr1 && i < pPKey2.nField; i++ {
 		//	Read the serial types for the next element in each key.
-		serial_type1, buf := Buffer(aKey[idx1:]).GetVarint32()
+		serial_type1, buf := Buffer(aKey[idx1:]).ReadVarint32()
 		idx += len(aKey[idx1:]) - len(buf)
 		if d1 >= nKey1 && VdbeSerialTypeLen(serial_type1) > 0 {
 			break
@@ -2067,12 +2067,12 @@ int sqlite3VdbeIdxRowid(sqlite3 *db, btree.Cursor *pCur, int64 *rowid) {
 	}()
 
 	//	The index entry must begin with a header size
-	if szHdr, _ = Buffer(m.z).GetVarint32(); szHdr < 3 || int(szHdr) > m.n {
+	if szHdr, _ = Buffer(m.z).ReadVarint32(); szHdr < 3 || int(szHdr) > m.n {
 		return SQLITE_CORRUPT_BKPT
 	}
 
 	//	The last field of the index should be an integer - the ROWID. Verify that the last entry really is an integer.
-	if typeRowid, _ = Buffer(&m.z[szHdr - 1:]).GetVarint32(); typeRowid < 1 || typeRowid == 7 || typeRowid > 9 {
+	if typeRowid, _ = Buffer(&m.z[szHdr - 1:]).ReadVarint32(); typeRowid < 1 || typeRowid == 7 || typeRowid > 9 {
 		return SQLITE_CORRUPT_BKPT
 	}
 
