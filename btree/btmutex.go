@@ -222,23 +222,18 @@ const(
 const	BTCURSOR_MAX_DEPTH	= 20
 
 
-//	These macros define the location of the pointer-map entry for a database page. The first argument to each is the number of usable
-//	bytes on each page of the database (often 1024). The second is the page number to look up in the pointer map.
+//	These macros define the location of the pointer-map entry for a database page. The first argument to each is the number of usable bytes on each page of the database (often 1024). The second is the page number to look up in the pointer map.
 //
 //	PTRMAP_PTROFFSET returns the offset of the requested map entry.
 //
-//	If the pgno argument passed to ptrmapPageno is a pointer-map page, then pgno is returned. So (pgno==ptrmapPageno(pgsz, pgno)) can be
-//	used to test if pgno is a pointer-map page. PTRMAP_ISPAGE implements this test.
+//	If the pgno argument passed to BtShared::Pageno is a pointer-map page, then pgno is returned. So (pgno == pgsz.Pageno(pgno)) can be	used to test if pgno is a pointer-map page. PTRMAP_ISPAGE implements this test.
 #define PTRMAP_PTROFFSET(pgptrmap, pgno) (5*(pgno-pgptrmap-1))
-#define PTRMAP_ISPAGE(pBt, pgno) (ptrmapPageno((pBt),(pgno))==(pgno))
+#define PTRMAP_ISPAGE(pBt, pgno) (pBt.Pageno(pgno) == pgno)
 
-//	The pointer map is a lookup table that identifies the parent page for each child page in the database file. The parent page is the page that
-//	contains a pointer to the child. Every page in the database contains 0 or 1 parent pages. (In this context 'database page' refers to any page
-//	that is not part of the pointer map itself.) Each pointer map entry consists of a single byte 'type' and a 4 byte parent page number.
+//	The pointer map is a lookup table that identifies the parent page for each child page in the database file. The parent page is the page that contains a pointer to the child. Every page in the database contains 0 or 1 parent pages. (In this context 'database page' refers to any page that is not part of the pointer map itself.) Each pointer map entry consists of a single byte 'type' and a 4 byte parent page number.
 //	The PTRMAP_XXX identifiers below are the valid types.
 //
-//	The purpose of the pointer map is to facility moving pages from one position in the file to another as part of autovacuum. When a page is moved,
-//	the pointer in its parent must be updated to point to the new location. The pointer map is used to locate the parent page quickly.
+//	The purpose of the pointer map is to facility moving pages from one position in the file to another as part of autovacuum. When a page is moved, the pointer in its parent must be updated to point to the new location. The pointer map is used to locate the parent page quickly.
 //
 //	PTRMAP_ROOTPAGE: The database page is a root-page. The page-number is not used in this case.
 //

@@ -378,26 +378,18 @@ static int btreeRestoreCursorPosition(Cursor *pCur){
   return SQLITE_OK;
 }
 
-/*
-** Given a page number of a regular database page, return the page
-** number for the pointer-map page that contains the entry for the
-** input page number.
-**
-** Return 0 (not a valid page) for pgno==1 since there is
-** no pointer map associated with page 1.  The integrity_check logic
-** requires that ptrmapPageno(*,1)!=1.
-*/
-static PageNumber ptrmapPageno(BtShared *pBt, PageNumber pgno){
-  int nPagesPerMapPage;
-  PageNumber iPtrMap, ret;
-  if( pgno<2 ) return 0;
-  nPagesPerMapPage = (pBt.usableSize/5)+1;
-  iPtrMap = (pgno-2)/nPagesPerMapPage;
-  ret = (iPtrMap*nPagesPerMapPage) + 2; 
-  if( ret==PAGER_MJ_PGNO(pBt) ){
-    ret++;
-  }
-  return ret;
+//	Given a page number of a regular database page, return the page number for the pointer-map page that contains the entry for the input page number.
+//	Return 0 (not a valid page) for pgno == 1 since there is no pointer map associated with page 1. The integrity_check logic requires that Pageno(1) != 1.
+func (pBt *BtShared) Pageno(pgno PageNumber) (n PageNumber) {
+	if pgno < 2 {
+		return 0
+	}
+	PagesPerMapPage := (pBt.usableSize / 5) + 1
+	PtrMap := (pgno - 2) / PagesPerMapPage
+	if n = (PtrMap * PagesPerMapPage) + 2; n == PAGER_MJ_PGNO(pBt) {
+		n++
+	}
+	return
 }
 
 //	Write an entry into the pointer map.
@@ -421,7 +413,7 @@ static void ptrmapPut(BtShared *pBt, PageNumber key, byte eType, PageNumber pare
     *pRC = SQLITE_CORRUPT_BKPT;
     return;
   }
-  iPtrmap = ptrmapPageno(pBt, key);
+  iPtrmap = pBt.Pageno(key)
   if pDbPage, rc = pBt.pPager.Acquire(iPtrmap, false); rc != SQLITE_OK {
     *pRC = rc;
     return;
@@ -460,7 +452,7 @@ static int ptrmapGet(BtShared *pBt, PageNumber key, byte *pEType, PageNumber *pP
   int offset;        /* Offset of entry in pointer map */
   int rc;
 
-  iPtrmap = ptrmapPageno(pBt, key);
+  iPtrmap = pBt.Pageno(key)
   if pDbPage, rc = pBt.pPager.Acquire(iPtrmap, false); rc != SQLITE_OK {
     return rc;
   }
@@ -2097,7 +2089,7 @@ static int autoVacuumCommit(BtShared *pBt){
 
     nFree = Buffer(pBt.pPage1.aData[36:]).ReadUint32()
     nEntry = pBt.usableSize/5;
-    nPtrmap = (nFree-nOrig+ptrmapPageno(pBt, nOrig)+nEntry)/nEntry;
+    nPtrmap = (nFree - nOrig + pBt.Pageno(nOrig) + nEntry) / nEntry
     nFin = nOrig - nFree - nPtrmap;
     if( nOrig>PAGER_MJ_PGNO(pBt) && nFin<PAGER_MJ_PGNO(pBt) ){
       nFin--;
@@ -5104,7 +5096,7 @@ static int btreeCreateTable(Btree *p, int *piTable, int createTabFlags){
     /* The new root-page may not be allocated on a pointer-map page, or the
     ** PENDING_BYTE page.
     */
-    while( RootPage==ptrmapPageno(pBt, RootPage) ||
+    while( RootPage==pBt.Pageno(RootPage) ||
         RootPage==PAGER_MJ_PGNO(pBt) ){
       RootPage++;
     }
@@ -5935,10 +5927,10 @@ func sqlite3BtreeIntegrityCheck(p *Btree, aRoot *int,		//	An array of root pages
 	//	Make sure every page in the file is referenced
 	for i := 1; i <= check.PageNumber && check.maxErr; i++ {
 		//	If the database supports auto-vacuum, make sure no tables contain references to pointer-map pages.
-		if getPageReferenced(check, i) == 0 && (ptrmapPageno(btree, i) != i || !btree.autoVacuum) {
+		if getPageReferenced(check, i) == 0 && (btree.Pageno(i) != i || !btree.autoVacuum) {
 			checkAppendMsg(check, 0, "Page %d is never used", i)
 		}
-		if getPageReferenced(check, i) != 0 && (ptrmapPageno(btree, i) == i && btree.autoVacuum) {
+		if getPageReferenced(check, i) != 0 && (btree.Pageno(i) == i && btree.autoVacuum) {
 			checkAppendMsg(check, 0, "Pointer map page %d is referenced", i)
 		}
 	}
