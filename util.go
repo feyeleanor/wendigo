@@ -55,7 +55,7 @@ func (db *sqlite3) Error(err_code int, format string, ap... string) {
 }
 
 //	Add an error message to pParse.zErrMsg and increment pParse.nErr.
-//	This function should be used to report any error that occurs whilst compiling an SQL statement (i.e. within sqlite3_prepare()). The last thing the sqlite3_prepare() function does is copy the error stored by this function into the database handle using Error(). Function Error() should be used during statement execution (sqlite3_step() etc.).
+//	This function should be used to report any error that occurs whilst compiling an SQL statement (i.e. within Prepare()). The last thing the Prepare() function does is copy the error stored by this function into the database handle using Error(). Function Error() should be used during statement execution (sqlite3_step() etc.).
 func (pParse *Parse) SetErrorMsg(format string, terms ...string) {
 	if !db.suppressErr {
 		db := pParse.db

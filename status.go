@@ -347,7 +347,7 @@ struct Explain {
 ** An instance of the virtual machine.  This structure contains the complete
 ** state of the virtual machine.
 **
-** The "sqlite3_stmt" structure pointer that is returned by sqlite3_prepare()
+** The "sqlite3_stmt" structure pointer that is returned by Prepare()
 ** is really a pointer to an instance of this structure.
 **
 ** The Vdbe.inVtabMethod variable is set to non-zero for the duration of
@@ -624,7 +624,7 @@ func int sqlite3_db_status(
 
       db.pnBytesFreed = &nByte;
       for(pVdbe=db.pVdbe; pVdbe; pVdbe=pVdbe.Next){
-        sqlite3VdbeDeleteObject(db, pVdbe);
+        db.DeleteObject(pVdbe)
       }
       db.pnBytesFreed = 0;
 

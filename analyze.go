@@ -750,7 +750,7 @@ static int loadStat3(sqlite3 *db, const char *zDb){
   if( !zSql ){
     return SQLITE_NOMEM;
   }
-  rc = sqlite3_prepare(db, zSql, -1, &pStmt, 0);
+  pStmt, _, rc = db.Prepare(zSql)
   zSql = nil
   if( rc ) return rc;
 
@@ -781,7 +781,7 @@ static int loadStat3(sqlite3 *db, const char *zDb){
   if( !zSql ){
     return SQLITE_NOMEM;
   }
-  rc = sqlite3_prepare(db, zSql, -1, &pStmt, 0);
+  pStmt, _, rc = db.Prepare(zSql)
   zSql = nil
   if( rc ) return rc;
 

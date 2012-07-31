@@ -724,9 +724,7 @@ static int walDecodeFrame(
 static int walLockShared(Wal *pWal, int lockIdx){
   int rc;
   if( pWal.exclusiveMode ) return SQLITE_OK;
-  rc = sqlite3OsShmLock(pWal.pDbFd, lockIdx, 1,
-                        SQLITE_SHM_LOCK | SQLITE_SHM_SHARED);
-  VVA_ONLY( pWal.lockError = (byte)(rc!=SQLITE_OK && rc!=SQLITE_BUSY); )
+  rc = sqlite3OsShmLock(pWal.pDbFd, lockIdx, 1, SQLITE_SHM_LOCK | SQLITE_SHM_SHARED);
   return rc;
 }
 static void walUnlockShared(Wal *pWal, int lockIdx){
@@ -737,9 +735,7 @@ static void walUnlockShared(Wal *pWal, int lockIdx){
 static int walLockExclusive(Wal *pWal, int lockIdx, int n){
   int rc;
   if( pWal.exclusiveMode ) return SQLITE_OK;
-  rc = sqlite3OsShmLock(pWal.pDbFd, lockIdx, n,
-                        SQLITE_SHM_LOCK | SQLITE_SHM_EXCLUSIVE);
-  VVA_ONLY( pWal.lockError = (byte)(rc!=SQLITE_OK && rc!=SQLITE_BUSY); )
+  rc = sqlite3OsShmLock(pWal.pDbFd, lockIdx, n, SQLITE_SHM_LOCK | SQLITE_SHM_EXCLUSIVE);
   return rc;
 }
 static void walUnlockExclusive(Wal *pWal, int lockIdx, int n){
@@ -2002,7 +1998,6 @@ static int walTryBeginRead(Wal *pWal, int *pChanged, int useWal, int cnt){
   if( cnt>5 ){
     int nDelay = 1;                      /* Pause time in microseconds */
     if( cnt>100 ){
-      VVA_ONLY( pWal.lockError = 1; )
       return SQLITE_PROTOCOL;
     }
     if( cnt>=10 ) nDelay = (cnt-9)*238;  /* Max delay 21ms. Total delay 996ms */

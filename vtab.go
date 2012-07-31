@@ -497,8 +497,8 @@ func int sqlite3_declare_vtab(sqlite3 *db, const char *zCreateTable){
     }
     pParse.declareVtab = 0;
   
-    if( pParse.pVdbe ){
-      sqlite3VdbeFinalize(pParse.pVdbe);
+    if pParse.pVdbe != nil {
+      pParse.pVdbe.Finalize()
     }
     db.DeleteTable(pParse.pNewTable)
 	pParse.pNewTable = nil

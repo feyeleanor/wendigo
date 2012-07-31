@@ -46,7 +46,7 @@ func int sqlite3_finalize(sqlite3_stmt *pStmt){
     if( vdbeSafety(v) ) return SQLITE_MISUSE_BKPT;
     mutex = v.db.mutex;
     mutex.Lock()
-    rc = sqlite3VdbeFinalize(v);
+    rc = v.Finalize()
     rc = db.ApiExit(rc)
     mutex.Unlock()
   }
@@ -328,25 +328,14 @@ static int sqlite3Step(Vdbe *p){
     p.rc = SQLITE_NOMEM
   }
 end_of_step:
-  /* At this point local variable rc holds the value that should be 
-  ** returned if this statement was compiled using the legacy 
-  ** sqlite3_prepare() interface. According to the docs, this can only
-  ** be one of the values in the first assert() below. Variable p.rc 
-  ** contains the value that would be returned if sqlite3_finalize() 
-  ** were called on statement p.
-  */
-  assert( rc==SQLITE_ROW  || rc==SQLITE_DONE   || rc==SQLITE_ERROR 
-       || rc==SQLITE_BUSY || rc==SQLITE_MISUSE
-  );
-  assert( p.rc!=SQLITE_ROW && p.rc!=SQLITE_DONE );
-  if( p.isPrepareV2 && rc!=SQLITE_ROW && rc!=SQLITE_DONE ){
-    /* If this statement was prepared using sqlite3_prepare_v2(), and an
-    ** error has occured, then return the error code in p.rc to the
-    ** caller. Set the error code in the database handle to the same value.
-    */ 
-    rc = sqlite3VdbeTransferError(p);
-  }
-  return (rc&db.errMask);
+	//	At this point local variable rc holds the value that should be returned if this statement was compiled using the legacy Prepare() interface. According to the docs, this can only be one of the values in the first assert() below. Variable p.rc contains the value that would be returned if sqlite3_finalize() were called on statement p.
+	assert( rc == SQLITE_ROW || rc == SQLITE_DONE || rc == SQLITE_ERROR || rc == SQLITE_BUSY || rc == SQLITE_MISUSE)
+	assert( p.rc != SQLITE_ROW && p.rc != SQLITE_DONE )
+	if p.isPrepareV2 && rc != SQLITE_ROW && rc != SQLITE_DONE {
+		//	If this statement was prepared using PrepareV2(), and an error has occured, then return the error code in p.rc to the caller. Set the error code in the database handle to the same value.
+		rc = sqlite3VdbeTransferError(p)
+	}
+	return rc & db.errMask
 }
 
 /*
@@ -357,14 +346,10 @@ end_of_step:
 # define SQLITE_MAX_SCHEMA_RETRY 5
 #endif
 
-/*
-** This is the top-level implementation of sqlite3_step().  Call
-** sqlite3Step() to do most of the work.  If a schema error occurs,
-** call sqlite3Reprepare() and try again.
-*/
+//	This is the top-level implementation of sqlite3_step(). Call sqlite3Step() to do most of the work. If a schema error occurs, call Reprepare() and try again.
 func int sqlite3_step(sqlite3_stmt *pStmt){
   int rc = SQLITE_OK;      /* Result from sqlite3Step() */
-  int rc2 = SQLITE_OK;     /* Result from sqlite3Reprepare() */
+  int rc2 = SQLITE_OK;     /* Result from Reprepare() */
   Vdbe *v = (Vdbe*)pStmt;  /* the prepared statement */
   int cnt = 0;             /* Counter to prevent infinite loop of reprepares */
   sqlite3 *db;             /* The database connection */
@@ -376,7 +361,7 @@ func int sqlite3_step(sqlite3_stmt *pStmt){
   db.mutex.Lock()
   while( (rc = sqlite3Step(v))==SQLITE_SCHEMA
          && cnt++ < SQLITE_MAX_SCHEMA_RETRY
-         && (rc2 = rc = sqlite3Reprepare(v))==SQLITE_OK ){
+         && (rc2 = rc = v.Reprepare()) == SQLITE_OK ){
     sqlite3_reset(pStmt);
     assert( v.expired==0 );
   }
@@ -957,7 +942,7 @@ func int sqlite3_bind_parameter_index(sqlite3_stmt *pStmt, const char *Name){
 /*
 ** Return the sqlite3* database handle to which the prepared statement given
 ** in the argument belongs.  This is the same database handle that was
-** the first argument to the sqlite3_prepare() that was used to create
+** the first argument to the Prepare() that was used to create
 ** the statement in the first place.
 */
 func sqlite3 *sqlite3_db_handle(sqlite3_stmt *pStmt){

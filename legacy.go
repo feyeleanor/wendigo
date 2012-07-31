@@ -40,16 +40,13 @@ func int sqlite3_exec(
     int nCol;
     char **azVals = 0;
 
-    pStmt = 0;
-    rc = sqlite3_prepare(db, zSql, -1, &pStmt, &zLeftover);
-    assert( rc==SQLITE_OK || pStmt==0 );
-    if( rc!=SQLITE_OK ){
-      continue;
-    }
-    if( !pStmt ){
-      /* this happens for a comment or white-space */
-      zSql = zLeftover;
-      continue;
+    switch pStmt, zLeftover, rc = db.Prepare(zSql); {
+	case rc != SQLITE_OK:
+      continue
+    case pStmt == nil:
+		//	this happens for a comment or white-space
+      zSql = zLeftover
+      continue
     }
 
     callbackIsInit = 0;
@@ -88,15 +85,15 @@ func int sqlite3_exec(
         }
         if( xCallback(pArg, nCol, azVals, azCols) ){
           rc = SQLITE_ABORT;
-          sqlite3VdbeFinalize((Vdbe *)pStmt);
-          pStmt = 0;
+          (Vdbe *)(pStmt).Finalize()
+          pStmt = nil
           db.Error(SQLITE_ABORT, "");
           goto exec_out;
         }
       }
 
       if( rc!=SQLITE_ROW ){
-        rc = sqlite3VdbeFinalize((Vdbe *)pStmt);
+        rc = (Vdbe *)(pStmt).Finalize()
         pStmt = 0;
         if( rc!=SQLITE_SCHEMA ){
           nRetry = 0;
@@ -111,7 +108,9 @@ func int sqlite3_exec(
   }
 
 exec_out:
-  if( pStmt ) sqlite3VdbeFinalize((Vdbe *)pStmt);
+  if pStmt != nil {
+	  (Vdbe *)(pStmt).Finalize()
+  }
   azCols = nil
 
   rc = db.ApiExit(rc)

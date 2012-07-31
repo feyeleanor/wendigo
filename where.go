@@ -2141,7 +2141,7 @@ static int whereKeyStats(
 ** caller to eventually release this structure by passing it to 
 ** Mem::Free().
 **
-** If the current parse is a recompile (sqlite3Reprepare()) and pExpr
+** If the current parse is a recompile (Reprepare()) and pExpr
 ** is an SQL variable that currently has a non-NULL value bound to it,
 ** create an sqlite3_value structure containing this value, again with
 ** affinity aff applied to it, instead.

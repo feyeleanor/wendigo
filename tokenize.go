@@ -526,7 +526,7 @@ abort_parse:
 		nErr++
 	}
 	if pParse.pVdbe != nil && pParse.nErr > 0 && !pParse.nested {
-		sqlite3VdbeDelete(pParse.pVdbe)
+		pParse.pVdbe.Delete()
 		pParse.pVdbe = nil
 	}
 	if !pParse.nested {

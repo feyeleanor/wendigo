@@ -80,7 +80,7 @@ func (p *MemoryPage) Initialize() (rc int) {
 				if pc < iCellFirst || pc > iCellLast {
 					return SQLITE_CORRUPT_BKPT
 				}
-				if sz := cellSizePtr(p, &data[pc]); pc + sz > usableSize {
+				if sz := p.cellSize(&data[pc]); pc + sz > usableSize {
 					return SQLITE_CORRUPT_BKPT
 				}
 			}
@@ -144,7 +144,7 @@ func (p *MemoryPage) Defragment() int {
 		pAddr := cellOffset + (i * 2)
 		pc := data[pAddr].ReadUint16()
 		assert( pc >= FirstAllowableIndex && pc <= LastAllowableIndex  )
-		size = cellSizePtr(pPage, &temp[pc])
+		size = pPage.cellSize(&temp[pc])
 		ContentArea -= size
 		if cbrk < FirstAllowableIndex {
 			return SQLITE_CORRUPT_BKPT

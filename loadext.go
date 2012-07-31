@@ -324,7 +324,6 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_libversion_number,
   sqlite3_malloc,
   sqlite3_open,
-  sqlite3_prepare,
   ProgressHandler,
   sqlite3_realloc,
   sqlite3_reset,
@@ -362,11 +361,6 @@ static const sqlite3_api_routines sqlite3Apis = {
   *************************************************************************
   */
   sqlite3_overload_function,
-
-  /*
-  ** Added after 3.3.13
-  */
-  sqlite3_prepare_v2,
 
   /*
   ** Added for 3.5.0

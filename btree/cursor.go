@@ -1,7 +1,7 @@
 package btree
 
 //	A cursor is a pointer to a particular entry within a particular b-tree within a database file.
-//	The entry is identified by its MemoryPage and the index in MemoryPage.aCell[] of the entry.
+//	The entry is identified by its MemoryPage and the index in MemoryPage.CellIndices[] of the entry.
 //	A single database file can be shared by two more database connections, but cursors cannot be shared.  Each cursor is associated with a
 //	particular database connection identified Cursor.pBtree.db.
 //	Fields in this structure are accessed under the BtShared.mutex found at self.pBt.mutex. 
@@ -231,7 +231,7 @@ func (pCur *Cursor) MoveToChild(newPageNumber uint32) (rc int) {
   rc = sqlite3PagerWrite(pPage.pDbPage);
   if( rc ) return rc;
   rc = clearCell(pPage, pCell);
-  dropCell(pPage, iCellIdx, cellSizePtr(pPage, pCell), &rc);
+  dropCell(pPage, iCellIdx, pPage.cellSize(pCell), &rc)
   if( rc ) return rc;
 
   /* If the cell deleted was not located on a leaf page, then the cursor
@@ -246,16 +246,21 @@ func (pCur *Cursor) MoveToChild(newPageNumber uint32) (rc int) {
     unsigned char *pTmp;
 
     pCell = pLeaf.FindCell(pLeaf.nCell - 1)
-    nCell = cellSizePtr(pLeaf, pCell);
+    nCell = pLeaf.cellSize(pCell)
     assert( MX_CELL_SIZE(pBt) >= nCell );
 
     allocateTempSpace(pBt);
     pTmp = pBt.pTmpSpace;
 
-    rc = sqlite3PagerWrite(pLeaf.pDbPage);
-    insertCell(pPage, iCellIdx, pCell-4, nCell+4, pTmp, n, &rc);
-    dropCell(pLeaf, pLeaf.nCell-1, nCell, &rc);
-    if( rc ) return rc;
+    if rc = sqlite3PagerWrite(pLeaf.pDbPage); rc == SQLITE_OK {
+		//	TODO:	pCell needs to point to memory 4 bytes before its start in the page
+		if rc = pPage.InsertCell(iCellIdx, pCell[-4:], pTmp, n); rc == SQLITE_OK {
+			dropCell(pLeaf, pLeaf.nCell-1, nCell, &rc)
+		}
+	}
+    if rc != SQLITE_OK {
+		return rc
+	}
   }
 
   /* Balance the tree. If the entry deleted was located on a leaf page,
@@ -282,7 +287,7 @@ func (pCur *Cursor) MoveToChild(newPageNumber uint32) (rc int) {
   }
 
   if( rc==SQLITE_OK ){
-    moveToRoot(pCur);
+    pCur.MoveToRoot()
   }
   return rc;
 }

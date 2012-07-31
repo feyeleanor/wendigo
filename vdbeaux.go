@@ -308,7 +308,7 @@ func (db *sqlite3) freeP4(p4type int, p4 interface{}) {
 			pVdbeFunc := (VdbeFunc *)(p4)
 			db.freeEphemeralFunction(pVdbeFunc.pFunc)
 			if db.pnBytesFreed == 0 {
-				sqlite3VdbeDeleteAuxData(pVdbeFunc, 0)
+				pVdbeFunc.DeleteAuxData(0)
 			}
 			pVdbeFunc = nil
 		case P4_FUNCDEF:
@@ -1607,42 +1607,32 @@ func (p *Vdbe) Reset() int {
 	return p.rc & db.errMask
 }
  
-/*
-** Clean up and delete a VDBE after execution.  Return an integer which is
-** the result code.  Write any error message text into *pzErrMsg.
-*/
- int sqlite3VdbeFinalize(Vdbe *p){
-  int rc = SQLITE_OK;
-  if( p.magic==VDBE_MAGIC_RUN || p.magic==VDBE_MAGIC_HALT ){
-    rc = p.Reset();
-    assert( (rc & p.db.errMask)==rc );
-  }
-  sqlite3VdbeDelete(p);
-  return rc;
+//	Clean up and delete a VDBE after execution. Return an integer which is the result code.
+func (p *Vdbe) Finalize() (rc int) {
+	if p.magic == VDBE_MAGIC_RUN || p.magic == VDBE_MAGIC_HALT {
+		rc = p.Reset()
+		assert( rc & p.db.errMask == rc )
+	}
+	p.Delete()
+	return
 }
 
-/*
-** Call the destructor for each auxdata entry in pVdbeFunc for which
-** the corresponding bit in mask is clear.  Auxdata entries beyond 31
-** are always destroyed.  To destroy all auxdata entries, call this
-** routine with mask==0.
-*/
- void sqlite3VdbeDeleteAuxData(VdbeFunc *pVdbeFunc, int mask){
-  int i;
-  for(i=0; i<pVdbeFunc.nAux; i++){
-    struct AuxData *pAux = &pVdbeFunc.apAux[i];
-    if( (i>31 || !(mask&(((uint32)1)<<i))) && pAux.Parameter ){
-      if( pAux.xDelete ){
-        pAux.xDelete(pAux.Parameter);
-      }
-      pAux.Parameter = 0;
-    }
-  }
+//	Call the destructor for each auxdata entry in pVdbeFunc for which the corresponding bit in mask is clear. Auxdata entries beyond 31 are always destroyed. To destroy all auxdata entries, call this routine with mask == 0.
+func (p *VdbeFunc) DeleteAuxData(mask int) {
+	for i := 0; i < p.nAux; i++ {
+		pAux := &pVdbeFunc.apAux[i]
+		if (i > 31 || !(mask & ((uint32(1)) << i))) && pAux.Parameter {
+			if pAux.xDelete != nil {
+				pAux.xDelete(pAux.Parameter)
+			}
+			pAux.Parameter = 0
+		}
+	}
 }
 
 //	Free all memory associated with the Vdbe passed as the second argument.
-//	The difference between this function and sqlite3VdbeDelete() is that VdbeDelete() also unlinks the Vdbe from the list of VMs associated with the database connection.
-void sqlite3VdbeDeleteObject(sqlite3 *db, Vdbe *p){
+//	The difference between this function and Vdbe::Delete() is that VdbeDelete() also unlinks the Vdbe from the list of VMs associated with the database connection.
+func (db *sqlite3) DeleteObject(p *Vdbe) {
 	assert( p.db == nil || p.db == db )
 	p.aVar = nil
 	p.ColumnsName = nil
@@ -1663,26 +1653,24 @@ void sqlite3VdbeDeleteObject(sqlite3 *db, Vdbe *p){
 	p = nil
 }
 
-/*
-** Delete an entire VDBE.
-*/
- void sqlite3VdbeDelete(Vdbe *p){
-  sqlite3 *db;
-
-  if( p==0 ) return;
-  db = p.db;
-  if( p.pPrev ){
-    p.pPrev.Next = p.Next;
-  }else{
-    assert( db.pVdbe==p );
-    db.pVdbe = p.Next;
-  }
-  if( p.Next ){
-    p.Next.pPrev = p.pPrev;
-  }
-  p.magic = VDBE_MAGIC_DEAD;
-  p.db = 0;
-  sqlite3VdbeDeleteObject(db, p);
+//	Delete an entire VDBE.
+func (p *Vdbe) Delete() {
+	if p == nil {
+		return
+	}
+	db := p.db
+	if p.pPrev != nil {
+		p.pPrev.Next = p.Next
+	} else {
+		assert( db.pVdbe == p )
+		db.pVdbe = p.Next
+	}
+	if p.Next != nil {
+		p.Next.pPrev = p.pPrev;
+	}
+	p.magic = VDBE_MAGIC_DEAD
+	p.db = nil
+	db.DeleteObject(p)
 }
 
 /*
@@ -1975,70 +1963,6 @@ void sqlite3VdbeRecordUnpack(
 	p.nField = u
 }
 
-//	This function compares the two table rows or index records specified by {nKey1, pKey1} and pPKey2. It returns a negative, zero or positive integer if key1 is less than, equal to or greater than key2. The {nKey1, pKey1} key must be a blob created by th OP_MakeRecord opcode of the VDBE. The pPKey2 key must be a parsed key such as obtained from sqlite3VdbeParseRecord.
-//	Key1 and Key2 do not have to contain the same number of fields. The key with fewer fields is usually compares less than the longer key. However if the UNPACKED_INCRKEY flags in pPKey2 is set and the common prefixes are equal, then key1 is less than key2. Or if the UNPACKED_MATCH_PREFIX flag is set and the prefixes are equal, then the keys are considered to be equal and the parts beyond the common prefix are ignored.
-func VdbeRecordCompare(pKey1 Buffer, pPKey2 *UnpackedRecord) (rc int) {
-	nKey1 := len(pKey1)
-	aKey1 := ([]byte)(pKey1)
-	pKeyInfo := pPKey2.pKeyInfo
-	mem1 := &Mem{ enc: pKeyInfo.enc, db: pKeyInfo.db }
-
-	szHdr1, buf := aKey1.ReadVarint32()
-	iudx1 := len(nKey1) - len(buf)
-	d1 := szHdr1
-	nField := pKeyInfo.nField;
-	for i := 0; idx1 < szHdr1 && i < pPKey2.nField; i++ {
-		//	Read the serial types for the next element in each key.
-		serial_type1, buf := Buffer(aKey[idx1:]).ReadVarint32()
-		idx += len(aKey[idx1:]) - len(buf)
-		if d1 >= nKey1 && VdbeSerialTypeLen(serial_type1) > 0 {
-			break
-		}
-
-		//	Extract the values to be compared.
-		d1 += mem1.VdbeSerialGet(aKey1[d1:], serial_type1)
-
-		//	Do the comparison
-		if i < nField {
-			rc = sqlite3MemCompare(&mem1, pPKey2.aMem[i], pKeyInfo.Collations[i])
-		} else {
-			rc = sqlite3MemCompare(&mem1, pPKey2.aMem[i], 0)
-		}
-
-		if rc != 0 {
-			assert( mem1.zMalloc == "" )			//	See comment below
-
-			//	Invert the result if we are using DESC sort order.
-			if pKeyInfo.aSortOrder && i < nField && pKeyInfo.aSortOrder[i] {
-				rc = -rc
-			}
-    
-			//	If the PREFIX_SEARCH flag is set and all fields except the final rowid field were equal, then clear the PREFIX_SEARCH flag and set pPKey2.rowid to the value of the rowid field in (pKey1, nKey1). This is used by the OP_IsUnique opcode.
-			if pPKey2.flags & UNPACKED_PREFIX_SEARCH && i == pPKey2.nField - 1 {
-				assert( idx1 == szHdr1 && rc )
-				pPKey2.flags &= ~UNPACKED_PREFIX_SEARCH
-				pPKey2.rowid = mem1.Integer()
-			}
-			return rc
-		}
-	}
-
-	//	No memory allocation is ever used on mem1. Prove this using the following assert(). If the assert() fails, it indicates a memory leak and a need to call mem1.Release().
-	assert( mem1.zMalloc == "" )
-
-	//	rc == 0 here means that one of the keys ran out of fields and all the fields up to that point were equal. If the UNPACKED_INCRKEY flag is set, then break the tie by treating key2 as larger. If the UPACKED_PREFIX_MATCH flag is set, then keys with common prefixes are considered to be equal. Otherwise, the longer key is the larger. As it happens, the pPKey2 will always be the longer if there is a difference.
-	assert( rc == 0 )
-	switch {
-	case pPKey2.flags & UNPACKED_INCRKEY:
-		rc = -1
-	case pPKey2.flags & UNPACKED_PREFIX_MATCH:
-		//	Leave rc == 0
-	case idx1 < szHdr1:
-		rc = 1
-	}
-	return rc
-}
- 
 
 //	pCur points at an index entry created using the OP_MakeRecord opcode. Read the rowid (the last field in the record) and store it in *rowid. Return SQLITE_OK if everything works, or an error code otherwise.
 //	pCur might be pointing to text obtained from a corrupt database file. So the content cannot be trusted. Do appropriate checks on the content.
@@ -2052,7 +1976,7 @@ int sqlite3VdbeIdxRowid(sqlite3 *db, btree.Cursor *pCur, int64 *rowid) {
 
 	//	Get the size of the index entry. Only indices entries of less than 2GiB are support - anything large must be database corruption. Any corruption is detected in sqlite3BtreeParseCellPtr(), though, so this code can safely assume that nCellKey is 32-bits
 	assert( sqlite3BtreeCursorIsValid(pCur) )
-	VVA_ONLY(rc =) sqlite3BtreeKeySize(pCur, &nCellKey)
+	sqlite3BtreeKeySize(pCur, &nCellKey)
 	assert( rc == SQLITE_OK )									//	pCur is always valid so KeySize cannot fail
 	assert( nCellKey & SQLITE_MAX_U32 == uint64(nCellKey) )
 
@@ -2108,9 +2032,9 @@ int sqlite3VdbeIdxKeyCompare(
 	Mem m;
 
 	assert( sqlite3BtreeCursorIsValid(pCur) );
-	VVA_ONLY(rc =) sqlite3BtreeKeySize(pCur, &nCellKey);
+	sqlite3BtreeKeySize(pCur, &nCellKey);
 	assert( rc == SQLITE_OK );    /* pCur is always valid so KeySize cannot fail */
-	//	nCellKey will always be between 0 and 0xffffffff because of the way that CellInfo::ParsePtr() and GetVarint32() are implemented
+	//	nCellKey will always be between 0 and 0xffffffff because of the way that CellInfo::ParsePtr() and ReadVarint32() are implemented
 	if( nCellKey<=0 || nCellKey>0x7fffffff ){
 		*res = 0;
 		return SQLITE_CORRUPT_BKPT;
@@ -2118,7 +2042,7 @@ int sqlite3VdbeIdxKeyCompare(
 	memset(&m, 0, sizeof(m));
 	if rc = sqlite3VdbeMemFromBtree(pC.pCursor, 0, (int)nCellKey, 1, &m); rc == SQLITE_OK {
 		assert( pUnpacked.flags & UNPACKED_PREFIX_MATCH )
-		*res = VdbeRecordCompare(m.z, pUnpacked)
+		*res = m.z.RecordCompare(pUnpacked)
 		m.Release()
 	}
 	return rc

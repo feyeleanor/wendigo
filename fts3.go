@@ -1358,7 +1358,7 @@ static void fts3DatabasePageSize(int *pRc, Fts3Table *p){
     if( !zSql ){
       rc = SQLITE_NOMEM;
     }else{
-      rc = sqlite3_prepare(p.db, zSql, -1, &pStmt, 0);
+      pStmt, _, rc = p.db.Prepare(zSql)
       if( rc==SQLITE_OK ){
         sqlite3_step(pStmt);
         p.nPgsz = sqlite3_column_int(pStmt, 0);
@@ -1671,7 +1671,7 @@ static int fts3ContentColumns(
   if( !zSql ){
     rc = SQLITE_NOMEM;
   }else{
-    rc = sqlite3_prepare(db, zSql, -1, &pStmt, 0);
+    pStmt, _, rc = db.Prepare(zSql)
   }
   zSql = nil
 
@@ -2207,7 +2207,7 @@ static int fts3CursorSeekStmt(Fts3Cursor *pCsr, sqlite3_stmt **ppStmt){
     char *zSql;
     zSql = fmt.Sprintf("SELECT %v WHERE rowid = ?", p.zReadExprlist)
     if( !zSql ) return SQLITE_NOMEM;
-    rc = sqlite3_prepare_v2(p.db, zSql, -1, &pCsr.pStmt, 0);
+    pCsr.pStmt, _, rc = p.db.PrepareV2(zSql)
     zSql = nil
   }
   *ppStmt = pCsr.pStmt;
@@ -3662,7 +3662,7 @@ static int fts3FilterMethod(
   if( idxNum==FTS3_FULLSCAN_SEARCH ){
     zSql = fmt.Sprintf("SELECT %v ORDER BY rowid %v", p.zReadExprlist, (pCsr.bDesc ? "DESC" : "ASC"))
     if( zSql ){
-      rc = sqlite3_prepare_v2(p.db, zSql, -1, &pCsr.pStmt, 0);
+      pCsr.pStmt, _, rc = p.db.PrepareV2(zSql)
       zSql = nil
     }else{
       rc = SQLITE_NOMEM;

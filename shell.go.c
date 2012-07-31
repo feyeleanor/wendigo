@@ -688,7 +688,7 @@ static int run_table_dump_query(
   int nResult;
   int i;
   const char *z;
-  rc = sqlite3_prepare(p.db, zSelect, -1, &pSelect, 0);
+  pSelect, _, rc = p.db.Prepare(zSelect)
   if( rc!=SQLITE_OK || !pSelect ){
     fprintf(p.out, "/**** ERROR: (%d) %s *****/\n", rc, sqlite3_errmsg(p.db));
     p.nErr++;
@@ -858,7 +858,7 @@ static int shell_exec(
   }
 
   while( zSql[0] && (SQLITE_OK == rc) ){
-    rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, &zLeftover);
+    pStmt, zLeftover, rc = db.PrepareV2(zSql)
     if( SQLITE_OK != rc ){
       if( pzErrMsg ){
         *pzErrMsg = save_err_msg(db);
@@ -1016,7 +1016,7 @@ static int dump_callback(void *pArg, int nArg, char **azArg, char **azCol){
     zTableInfo = appendText(zTableInfo, zTable, '"');
     zTableInfo = appendText(zTableInfo, ");", 0);
 
-    rc = sqlite3_prepare(p.db, zTableInfo, -1, &pTableInfo, 0);
+    pTableInfo, _, rc = p.db.Prepare(zTableInfo)
     free(zTableInfo);
     if( rc!=SQLITE_OK || !pTableInfo ){
       return 1;
@@ -1524,7 +1524,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
       return 1;
     }
     nByte = strlen30(zSql);
-    rc = sqlite3_prepare(p.db, zSql, -1, &pStmt, 0);
+    pStmt, _, rc = p.db.Prepare(zSql)
     zSql = nil
     if( rc ){
       if (pStmt) sqlite3_finalize(pStmt);
@@ -1548,7 +1548,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
     }
     zSql[j++] = ')';
     zSql[j] = 0;
-    rc = sqlite3_prepare(p.db, zSql, -1, &pStmt, 0);
+    pStmt, _, rc = p.db.Prepare(zSql)
     free(zSql);
     if( rc ){
       fprintf(stderr, "Error: %s\n", sqlite3_errmsg(db));
@@ -1971,7 +1971,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
     char *zSql = 0;
     int ii;
     open_db(p);
-    rc = sqlite3_prepare_v2(p.db, "PRAGMA database_list", -1, &pStmt, 0);
+    pStmt, _, rc = p.db.PrepareV2("PRAGMA database_list")
     if( rc ) return rc;
     zSql = fmt.Sprintf(
         "SELECT name FROM sqlite_master"
@@ -1999,7 +1999,7 @@ static int do_meta_command(char *zLine, struct callback_data *p){
     }
     sqlite3_finalize(pStmt);
     zSql = fmt.Sprintf("%v ORDER BY 1", zSql);
-    rc = sqlite3_prepare_v2(p.db, zSql, -1, &pStmt, 0);
+    pStmt, _, rc = p.db.PrepareV2(zSql)
     zSql = nil
     if( rc ) return rc;
     nRow = nAlloc = 0;

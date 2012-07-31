@@ -858,7 +858,7 @@ static TriggerPrg *codeRowTrigger(
     routine.token = (void *)pTrigger;
     pPrg.Columnsmask[0] = pSubParse.oldmask;
     pPrg.Columnsmask[1] = pSubParse.newmask;
-    sqlite3VdbeDelete(v);
+    v.Delete()
   }
 
   assert( !pSubParse.pAinc       && !pSubParse.pZombieTab );

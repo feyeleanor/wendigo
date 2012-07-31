@@ -244,8 +244,6 @@
 # include <tcl.h>
 #endif
 
-# define VVA_ONLY(X)
-
 /************** Include sqlite3.h in the middle of sqliteInt.h ***************/
 /************** Begin file sqlite3.h *****************************************/
 //	This header file defines the interface that the SQLite library presents to client programs. If a C-function, structure, datatype,
@@ -373,7 +371,7 @@ func const char *sqlite3_compileoption_get(int N);
 ** pointer as an object.  The [sqlite3_open()] and
 ** [sqlite3_open_v2()] interfaces are its constructors, and [sqlite3::Close()]
 ** is its destructor.  There are many other interfaces (such as
-** [sqlite3_prepare_v2()], [sqlite3_create_function()], and
+** [PrepareV2()], [sqlite3_create_function()], and
 ** [sqlite3_busy_timeout()] to name but three) that are methods on an
 ** sqlite3 object.
 */
@@ -390,7 +388,7 @@ typedef int (*sqlite3_callback)(void*,int,char**, char**);
 ** CAPI3REF: One-Step Query Execution Interface
 **
 ** The sqlite3_exec() interface is a convenience wrapper around
-** [sqlite3_prepare_v2()], [sqlite3_step()], and [sqlite3_finalize()],
+** [PrepareV2()], [sqlite3_step()], and [sqlite3_finalize()],
 ** that allows an application to run multiple statements of SQL
 ** without having to use a lot of C code. 
 **
@@ -2149,7 +2147,7 @@ func int64 sqlite3_memory_highwater(int resetFlag);
 ** ^This routine registers an authorizer callback with a particular
 ** [database connection], supplied in the first argument.
 ** ^The authorizer callback is invoked as SQL statements are being compiled
-** by [sqlite3_prepare()] or its variant [sqlite3_prepare_v2()].  ^At various
+** by [Prepare()] or its variant [PrepareV2()].  ^At various
 ** points during the compilation process, as logic is being created
 ** to perform various actions, the authorizer callback is invoked to
 ** see if those actions are allowed.  ^The authorizer callback should
@@ -2158,12 +2156,12 @@ func int64 sqlite3_memory_highwater(int resetFlag);
 ** compiled, or [SQLITE_DENY] to cause the entire SQL statement to be
 ** rejected with an error.  ^If the authorizer callback returns
 ** any value other than [SQLITE_IGNORE], [SQLITE_OK], or [SQLITE_DENY]
-** then the [sqlite3_prepare_v2()] or equivalent call that triggered
+** then the [PrepareV2()] or equivalent call that triggered
 ** the authorizer will fail with an error message.
 **
 ** When the callback returns [SQLITE_OK], that means the operation
 ** requested is ok.  ^When the callback returns [SQLITE_DENY], the
-** [sqlite3_prepare_v2()] or equivalent call that triggered the
+** [PrepareV2()] or equivalent call that triggered the
 ** authorizer will fail with an error message explaining that
 ** access is denied. 
 **
@@ -2185,7 +2183,7 @@ func int64 sqlite3_memory_highwater(int resetFlag);
 ** [SQLITE_IGNORE] then the [DELETE] operation proceeds but the
 ** [truncate optimization] is disabled and all rows are deleted individually.
 **
-** An authorizer is used when [sqlite3_prepare | preparing]
+** An authorizer is used when [Prepare | preparing]
 ** SQL statements from an untrusted source, to ensure that the SQL statements
 ** do not try to access data they are not allowed to see, or that they do not
 ** try to execute malicious statements that damage the database.  For
@@ -2193,7 +2191,7 @@ func int64 sqlite3_memory_highwater(int resetFlag);
 ** SQL queries for evaluation by a database.  But the application does
 ** not want the user to be able to make arbitrary changes to the
 ** database.  An authorizer could then be put in place while the
-** user-entered SQL is being [sqlite3_prepare | prepared] that
+** user-entered SQL is being [Prepare | prepared] that
 ** disallows everything except [SELECT] statements.
 **
 ** Applications that need to process SQL from untrusted sources
@@ -2208,19 +2206,19 @@ func int64 sqlite3_memory_highwater(int resetFlag);
 **
 ** The authorizer callback must not do anything that will modify
 ** the database connection that invoked the authorizer callback.
-** Note that [sqlite3_prepare_v2()] and [sqlite3_step()] both modify their
+** Note that [PrepareV2()] and [sqlite3_step()] both modify their
 ** database connections for the meaning of "modify" in this paragraph.
 **
-** ^When [sqlite3_prepare_v2()] is used to prepare a statement, the
+** ^When [PrepareV2()] is used to prepare a statement, the
 ** statement might be re-prepared during [sqlite3_step()] due to a 
 ** schema change.  Hence, the application should ensure that the
 ** correct authorizer callback remains in place during the [sqlite3_step()].
 **
 ** ^Note that the authorizer callback is invoked only during
-** [sqlite3_prepare()] or its variants.  Authorization is not
+** [Prepare()] or its variants.  Authorization is not
 ** performed during statement evaluation in [sqlite3_step()], unless
 ** as stated in the previous paragraph, sqlite3_step() invokes
-** sqlite3_prepare_v2() to reprepare a statement after a schema change.
+** PrepareV2() to reprepare a statement after a schema change.
 */
 func int sqlite3_set_authorizer(
   sqlite3*,
@@ -2349,7 +2347,7 @@ func void *sqlite3_trace(sqlite3*, void(*xTrace)(void*,const char*), void*);
 **
 ** The progress handler callback must not do anything that will modify
 ** the database connection that invoked the progress handler.
-** Note that [sqlite3_prepare_v2()] and [sqlite3_step()] both modify their
+** Note that [PrepareV2()] and [sqlite3_step()] both modify their
 ** database connections for the meaning of "modify" in this paragraph.
 **
 */
@@ -2478,7 +2476,7 @@ func void *sqlite3_trace(sqlite3*, void(*xTrace)(void*,const char*), void*);
 **     "rwc". Attempting to set it to any other value is an error)^. 
 **     ^If "ro" is specified, then the database is opened for read-only 
 **     access, just as if the [SQLITE_OPEN_READONLY] flag had been set in the 
-**     third argument to sqlite3_prepare_v2(). ^If the mode option is set to 
+**     third argument to PrepareV2(). ^If the mode option is set to 
 **     "rw", then the database is opened for read-write (but not create) 
 **     access, as if SQLITE_OPEN_READWRITE (but not SQLITE_OPEN_CREATE) had 
 **     been set. ^Value "rwc" is equivalent to setting both 
@@ -2647,7 +2645,7 @@ func const char *sqlite3_errmsg(sqlite3*);
 ** The life of a statement object goes something like this:
 **
 ** <ol>
-** <li> Create the object using [sqlite3_prepare_v2()] or a related
+** <li> Create the object using [PrepareV2()] or a related
 **      function.
 ** <li> Bind values to [host parameters] using the sqlite3_bind_*()
 **      interfaces.
@@ -2771,7 +2769,7 @@ const(
 ** prior successful call to [sqlite3_open()] or [sqlite3_open_v2()].  The database connection must not have been closed.
 **
 ** The second argument, "zSql", is the statement to be compiled, encoded
-** as UTF-8.  The sqlite3_prepare() and sqlite3_prepare_v2()
+** as UTF-8.  The Prepare() and PrepareV2()
 ** interfaces use UTF-8.
 **
 ** ^If the nByte argument is less than zero, then zSql is read up to the
@@ -2798,10 +2796,10 @@ const(
 ** SQL statement using [sqlite3_finalize()] after it has finished with it.
 ** ppStmt may not be NULL.
 **
-** ^On success, the sqlite3_prepare() family of routines return [SQLITE_OK];
+** ^On success, the Prepare() family of routines return [SQLITE_OK];
 ** otherwise an [error code] is returned.
 **
-** The sqlite3_prepare_v2() interface is recommended for all new programs. The older interface is retained
+** The PrepareV2() interface is recommended for all new programs. The older interface is retained
 ** for backwards compatibility, but its use is discouraged.
 ** ^In the "v2" interfaces, the prepared statement that is returned (the [sqlite3_stmt] object) contains a copy of the
 ** original SQL text. This causes the [sqlite3_step()] interface to behave differently in three ways:
@@ -2834,27 +2832,13 @@ const(
 ** </li>
 ** </ol>
 */
-func int sqlite3_prepare(
-  sqlite3 *db,            /* Database handle */
-  const char *zSql,       /* SQL statement, UTF-8 encoded */
-  int nByte,              /* Maximum length of zSql in bytes. */
-  sqlite3_stmt **ppStmt,  /* OUT: Statement handle */
-  const char **pzTail     /* OUT: Pointer to unused portion of zSql */
-);
-func int sqlite3_prepare_v2(
-  sqlite3 *db,            /* Database handle */
-  const char *zSql,       /* SQL statement, UTF-8 encoded */
-  int nByte,              /* Maximum length of zSql in bytes. */
-  sqlite3_stmt **ppStmt,  /* OUT: Statement handle */
-  const char **pzTail     /* OUT: Pointer to unused portion of zSql */
-);
 
 /*
 ** CAPI3REF: Retrieving Statement SQL
 **
 ** ^This interface can be used to retrieve a saved copy of the original
 ** SQL text used to create a [prepared statement] if that statement was
-** compiled using [sqlite3_prepare_v2()].
+** compiled using [PrepareV2()].
 */
 func const char *sqlite3_sql(sqlite3_stmt *pStmt);
 
@@ -2964,7 +2948,7 @@ typedef struct sqlite3_context sqlite3_context;
 ** KEYWORDS: {host parameter} {host parameters} {host parameter name}
 ** KEYWORDS: {SQL parameter} {SQL parameters} {parameter binding}
 **
-** ^(In the SQL statement text input to [sqlite3_prepare_v2()] and its variants,
+** ^(In the SQL statement text input to [PrepareV2()] and its variants,
 ** literals may be replaced by a [parameter] that matches one of following
 ** templates:
 **
@@ -2983,7 +2967,7 @@ typedef struct sqlite3_context sqlite3_context;
 **
 ** ^The first argument to the sqlite3_bind_*() routines is always
 ** a pointer to the [sqlite3_stmt] object returned from
-** [sqlite3_prepare_v2()] or its variants.
+** [PrepareV2()] or its variants.
 **
 ** ^The second argument is the index of the SQL parameter to be set.
 ** ^The leftmost SQL parameter has an index of 1.  ^When the same named
@@ -3233,12 +3217,12 @@ func const char *sqlite3_column_decltype(sqlite3_stmt*,int);
 /*
 ** CAPI3REF: Evaluate An SQL Statement
 **
-** After a [prepared statement] has been prepared using either [sqlite3_prepare_v2()] or the legacy
-** interfaces [sqlite3_prepare()], this function must be called one or more times to evaluate the statement.
+** After a [prepared statement] has been prepared using either [PrepareV2()] or the legacy
+** interfaces [Prepare()], this function must be called one or more times to evaluate the statement.
 **
 ** The details of the behavior of the sqlite3_step() interface depend
 ** on whether the statement was prepared using the newer "v2" interface
-** [sqlite3_prepare_v2()] or the older legacy interface [sqlite3_prepare()].  The use of the
+** [PrepareV2()] or the older legacy interface [Prepare()].  The use of the
 ** new "v2" interface is recommended for new applications but the legacy
 ** interface will continue to be supported.
 **
@@ -3299,7 +3283,7 @@ func const char *sqlite3_column_decltype(sqlite3_stmt*,int);
 ** specific [error codes] that better describes the error.
 ** We admit that this is a goofy design.  The problem has been fixed
 ** with the "v2" interface.  If you prepare all of your SQL statements
-** using [sqlite3_prepare_v2()] instead of the legacy [sqlite3_prepare()] interfaces,
+** using [PrepareV2()] instead of the legacy [Prepare()] interfaces,
 ** then the more specific [error codes] are returned directly
 ** by sqlite3_step().  The use of the "v2" interface is recommended.
 */
@@ -3366,7 +3350,7 @@ func int sqlite3_data_count(sqlite3_stmt *pStmt);
 ** ^These routines return information about a single column of the current
 ** result row of a query.  ^In every case the first argument is a pointer
 ** to the [prepared statement] that is being evaluated (the [sqlite3_stmt*]
-** that was returned from [sqlite3_prepare_v2()] or one of its variants)
+** that was returned from [PrepareV2()] or one of its variants)
 ** and the second argument is the index of the column for which information
 ** should be returned. ^The leftmost column of the result set has the index 0.
 ** ^The number of columns in the result can be determined using
@@ -4175,7 +4159,7 @@ func int sqlite3_get_autocommit(sqlite3*);
 ** to which a [prepared statement] belongs.  ^The [database connection]
 ** returned by sqlite3_db_handle is the same [database connection]
 ** that was the first argument
-** to the [sqlite3_prepare_v2()] call (or its variants) that was used to
+** to the [PrepareV2()] call (or its variants) that was used to
 ** create the statement in the first place.
 */
 func sqlite3 *sqlite3_db_handle(sqlite3_stmt*);
@@ -4247,7 +4231,7 @@ func sqlite3_stmt *sqlite3_next_stmt(sqlite3 *pDb, sqlite3_stmt *pStmt);
 ** completion of the [sqlite3_step()] call that triggered the commit
 ** or rollback hook in the first place.
 ** Note that running any other SQL statements, including SELECT statements,
-** or merely calling [sqlite3_prepare_v2()] and [sqlite3_step()] will modify
+** or merely calling [PrepareV2()] and [sqlite3_step()] will modify
 ** the database connections for the meaning of "modify" in this paragraph.
 **
 ** ^Registering a NULL function disables the callback.
@@ -4304,7 +4288,7 @@ func void *sqlite3_rollback_hook(sqlite3*, void(*)(void *), void*);
 ** the database connection that invoked the update hook.  Any actions
 ** to modify the database connection must be deferred until after the
 ** completion of the [sqlite3_step()] call that triggered the update hook.
-** Note that [sqlite3_prepare_v2()] and [sqlite3_step()] both modify their
+** Note that [PrepareV2()] and [sqlite3_step()] both modify their
 ** database connections for the meaning of "modify" in this paragraph.
 **
 ** ^The sqlite3_update_hook(D,C,P) function
@@ -6944,7 +6928,6 @@ typedef struct BtShared BtShared;
  int sqlite3BtreeInsert(btree.Cursor*, const void *pKey, int64 nKey,
                                   const void *pData, int nData,
                                   int nZero, int bias, int seekResult);
- int sqlite3BtreeFirst(btree.Cursor*, int *pRes);
  int sqlite3BtreeLast(btree.Cursor*, int *pRes);
  int sqlite3BtreeNext(btree.Cursor*, int *pRes);
  int sqlite3BtreeEof(btree.Cursor*);
@@ -7299,10 +7282,7 @@ type VdbeOpList {
  int sqlite3VdbeAddOp4Int(Vdbe*,int,int,int,int,int);
  void sqlite3VdbeUsesBtree(Vdbe*, int);
  VdbeOp *sqlite3VdbeGetOp(Vdbe*, int);
- void sqlite3VdbeDelete(Vdbe*);
- void sqlite3VdbeDeleteObject(sqlite3*,Vdbe*);
  void sqlite3VdbeMakeReady(Vdbe*,Parse*);
- int sqlite3VdbeFinalize(Vdbe*);
  void sqlite3VdbeSetNumCols(Vdbe*,int);
  int sqlite3VdbeSetColName(Vdbe*, int, int, const char *, void(*)(void*));
  void sqlite3VdbeCountChanges(Vdbe*);
@@ -7992,7 +7972,7 @@ struct sqlite3 {
 
   VtabCtx *pVtabCtx;            /* Context for active vtab connect/create */
   VTable **aVTrans;             /* Virtual tables with open transactions */
-  pDisconnect				[]*VTable				//	Disconnect these in next sqlite3_prepare()
+  pDisconnect				[]*VTable				//	Disconnect these in next Prepare()
   FuncDefHash aFunc;            /* Hash table of connection functions */
 
 	Collations				map[string]*CollSeq
@@ -8273,7 +8253,7 @@ struct CollSeq {
 
 //	An object of this type is created for each virtual table present in the database schema. 
 //	If the database schema is shared, then there is one instance of this structure for each database connection (sqlite3*) that uses the shared schema. This is because each database connection requires its own unique instance of the sqlite3_vtab* handle used to access the virtual table implementation. sqlite3_vtab* handles can not be shared between database connections, even when the rest of the in-memory database schema is shared, as the implementation often stores the database connection handle passed to it via the xConnect() or xCreate() method during initialization internally. This database connection handle may then be used by the virtual table implementation to access real tables within the database. So that they appear as part of the callers transaction, these accesses need to be made via the same database connection as that used to execute SQL operations on the virtual table.
-//	All VTable objects that correspond to a single table in a shared database schema are initially stored in a slice pointed to by the Table.VirtualTables member variable of the corresponding Table object. When an sqlite3_prepare() operation is required to access the virtual table, it searches the slice for the VTable that corresponds to the database connection doing the preparing so as to use the correct sqlite3_vtab* handle in the compiled query.
+//	All VTable objects that correspond to a single table in a shared database schema are initially stored in a slice pointed to by the Table.VirtualTables member variable of the corresponding Table object. When an Prepare() operation is required to access the virtual table, it searches the slice for the VTable that corresponds to the database connection doing the preparing so as to use the correct sqlite3_vtab* handle in the compiled query.
 //	When an in-memory Table object is deleted (for example when the schema is being reloaded for some reason), the VTable objects are not deleted and the sqlite3_vtab* handles are not xDisconnect()ed immediately. Instead, they are moved from the Table.VirtualTables list to another linked list headed by the sqlite3.pDisconnect member of the corresponding sqlite3 structure. They are then deleted/xDisconnected next time a statement is prepared using said sqlite3*. This is done to avoid deadlock issues involving multiple sqlite3.mutex mutexes.
 //	The memory for objects of this type is always allocated by sqlite3DbMalloc(), using the connection handle stored in VTable.db as the first argument.
 
@@ -9138,7 +9118,7 @@ struct Parse {
   int iNextSelectId;        /* Next available select ID for EXPLAIN output */
 #endif
   char **azVar;             /* Pointers to names of parameters */
-  Vdbe *pReprepare;         /* VM being reprepared (sqlite3Reprepare()) */
+  Vdbe *pReprepare;         /* VM being reprepared (Reprepare()) */
   int *aAlias;              /* Register used to hold aliased result */
   const char *zTail;        /* All SQL text past the last semicolon parsed */
   Table *pNewTable;         /* A table being constructed by CREATE TABLE */

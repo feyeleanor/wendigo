@@ -1995,7 +1995,6 @@ func (pParse *Parse) ExprCodeMove(from, to, count int) {
       Expr cacheX;                      /* Cached expression X */
       Expr *pX;                         /* The X expression */
       Expr *pTest = 0;                  /* X==Ei (form A) or just Ei (form B) */
-      VVA_ONLY( int iCacheLevel = pParse.iCacheLevel; )
 
       assert( !pExpr.HasProperty(EP_xIsSelect) && pExpr.pList );
       assert((pExpr.pList.nExpr % 2) == 0);

@@ -228,7 +228,9 @@ blob_open_out:
   if( rc==SQLITE_OK && !db.mallocFailed ){
     *ppBlob = (sqlite3_blob *)pBlob;
   }else{
-    if( pBlob && pBlob.pStmt ) sqlite3VdbeFinalize((Vdbe *)pBlob.pStmt);
+    if pBlob != nil && pBlob.pStmt != nil {
+		(Vdbe *)(pBlob.pStmt).Finalize()
+	}
     pBlob = nil
   }
   db.Error(rc, (zErr ? "%s" : 0), zErr);
@@ -298,7 +300,7 @@ static int blobReadWrite(
     rc = xCall(p.pCsr, iOffset+p.iOffset, n, z);
     p.pCsr.Unlock()
     if( rc==SQLITE_ABORT ){
-      sqlite3VdbeFinalize(v);
+      v.Finalize()
       p.pStmt = 0;
     }else{
       db.errCode = rc;

@@ -1,12 +1,4 @@
-/* This file contains the implementation of the sqlite3_prepare()
-** interface, and routines that contribute to loading the database schema
-** from disk.
-*/
-
-/*
-** Fill the InitData structure with an error message that indicates
-** that the database is corrupt.
-*/
+//	Fill the InitData structure with an error message that indicates that the database is corrupt.
 static void corruptSchema(
   InitData *pData,     /* Initialization context */
   const char *zObj,    /* Object being parsed at the point of error */
@@ -23,19 +15,12 @@ static void corruptSchema(
   pData.rc = db.mallocFailed ? SQLITE_NOMEM : SQLITE_CORRUPT_BKPT;
 }
 
-/*
-** This is the callback routine for the code that initializes the
-** database.  See sqlite3::Init() below for additional information.
-** This routine is also called from the OP_ParseSchema opcode of the VDBE.
-**
-** Each callback contains the following information:
-**
-**     argv[0] = name of thing being created
-**     argv[1] = root page number for table or index. 0 for trigger or view.
-**     argv[2] = SQL text for the CREATE statement.
-**
-*/
- int sqlite3InitCallback(void *pInit, int argc, char **argv, char **NotUsed){
+//	This is the callback routine for the code that initializes the database. See sqlite3::Init() below for additional information. This routine is also called from the OP_ParseSchema opcode of the VDBE.
+//	Each callback contains the following information:
+//		argv[0] = name of thing being created
+//		argv[1] = root page number for table or index. 0 for trigger or view.
+//		argv[2] = SQL text for the CREATE statement.
+int sqlite3InitCallback(void *pInit, int argc, char **argv, char **NotUsed){
   InitData *pData = (InitData*)pInit;
   sqlite3 *db = pData.db;
   int iDb = pData.iDb;
@@ -62,9 +47,9 @@ static void corruptSchema(
 
     assert( db.init.busy );
     db.init.iDb = iDb;
-    db.init.newTnum = sqlite3Atoi(argv[1]);
+    db.init.newTnum = sqlite3Atoi(argv[1])
     db.init.orphanTrigger = 0;
-    sqlite3_prepare(db, argv[2], -1, &pStmt, 0);
+    _, _, pStmt = db.Prepare(argv[2])
     rc = db.errCode;
     assert( (rc&0xFF)==(rcp&0xFF) );
     db.init.iDb = 0;
@@ -240,7 +225,7 @@ func (db *sqlite3) InitOne(iDb int, ErrMsg string) (rc int) {
 		db.ResetInternalSchema(-1)
 	}
 	if rc == SQLITE_OK || (db.flags & SQLITE_RecoveryMode) != 0 {
-		//	Black magic: If the SQLITE_RecoveryMode flag is set, then consider the schema loaded, even if errors occurred. In this situation the current sqlite3_prepare() operation will fail, but the following one will attempt to compile the supplied statement against whatever subset of the schema was loaded before the error occurred. The primary purpose of this is to allow access to the sqlite_master table even when its contents have been corrupted.
+		//	Black magic: If the SQLITE_RecoveryMode flag is set, then consider the schema loaded, even if errors occurred. In this situation the current Prepare() operation will fail, but the following one will attempt to compile the supplied statement against whatever subset of the schema was loaded before the error occurred. The primary purpose of this is to allow access to the sqlite_master table even when its contents have been corrupted.
 		db.SetProperty(iDb, DB_SchemaLoaded)
 		rc = SQLITE_OK
 	}
@@ -384,7 +369,7 @@ static int sqlite3Prepare(
 
 	//	Check to verify that it is possible to get a read lock on all database schemas. The inability to get a read lock indicates that some other database connection is holding a write-lock, which in turn means that the other connection has made uncommitted changes to the schema.
 	//	Were we to proceed and prepare the statement against the uncommitted schema changes and if those schema changes are subsequently rolled back and different changes are made in their place, then when this prepared statement goes to run the schema cookie would fail to detect the schema change. Disaster would follow.
-	//	This thread is currently holding mutexes on all Btrees (because of the LockAll() in sqlite3LockAndPrepare()) so it is not possible for another thread to start a new schema change while this routine is running. Hence, we do not need to hold locks on the schema, we just need to make sure nobody else is holding them.
+	//	This thread is currently holding mutexes on all Btrees (because of the LockAll() in LockAndPrepare()) so it is not possible for another thread to start a new schema change while this routine is running. Hence, we do not need to hold locks on the schema, we just need to make sure nobody else is holding them.
 	//	Note that setting READ_UNCOMMITTED overrides most lock detection, but it does *not* override schema lock detection, so this all still works even if READ_UNCOMMITTED is set.
 	for _, database := range db.Databases {
 		if pBt := database.pBt; pBt != nil {
@@ -453,7 +438,7 @@ static int sqlite3Prepare(
 		sqlite3VdbeSetSql(pVdbe, zSql, (int)(pParse.zTail-zSql), saveSqlFlag)
 	}
 	if pParse.pVdbe != nil && (rc != SQLITE_OK || db.mallocFailed) {
-		sqlite3VdbeFinalize(pParse.pVdbe)
+		pParse.pVdbe.Finalize()
 		assert(!(*ppStmt))
 	} else {
 		*ppStmt = (sqlite3_stmt*)pParse.pVdbe
@@ -480,99 +465,54 @@ end_prepare:
 	return rc
 }
 
-
-static int sqlite3LockAndPrepare(
-  sqlite3 *db,              /* Database handle. */
-  const char *zSql,         /* UTF-8 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  int saveSqlFlag,          /* True to copy SQL text into the sqlite3_stmt */
-  Vdbe *pOld,               /* VM being reprepared */
-  sqlite3_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const char **pzTail       /* OUT: End of parsed string */
-){
-  int rc;
-  assert( ppStmt!=0 );
-  *ppStmt = 0;
-  if !db.SafetyCheckOk() {
-    return SQLITE_MISUSE_BKPT;
-  }
-  db.mutex.Lock()
-  db.LockAll()
-  rc = sqlite3Prepare(db, zSql, nBytes, saveSqlFlag, pOld, ppStmt, pzTail);
-  if( rc==SQLITE_SCHEMA ){
-    sqlite3_finalize(*ppStmt);
-    rc = sqlite3Prepare(db, zSql, nBytes, saveSqlFlag, pOld, ppStmt, pzTail);
-  }
-  db.LeaveBtreeAll()
-  db.mutex.Unlock()
-  assert( rc==SQLITE_OK || *ppStmt==0 );
-  return rc;
+func (db *sqlite3) LockAndPrepare(Sql string, saveSqlFlag bool, pOld *Vdbe) (statement *sqlite3_stmt, tail string, rc int) {
+	if !db.SafetyCheckOk() {
+		return SQLITE_MISUSE_BKPT
+	}
+	db.mutex.CriticalSection(func() {
+		db.LockAll()
+		if rc = sqlite3Prepare(db, Sql, len(Sql), saveSqlFlag, pOld, statement, tail); rc == SQLITE_SCHEMA {
+			sqlite3_finalize(statement)
+			rc = sqlite3Prepare(db, Sql, len(Sql), saveSqlFlag, pOld, statement, tail)
+		}
+		db.LeaveBtreeAll()
+	})
+	assert( rc == SQLITE_OK || statement == nil )
+	return
 }
 
-/*
-** Rerun the compilation of a statement after a schema change.
-**
-** If the statement is successfully recompiled, return SQLITE_OK. Otherwise,
-** if the statement cannot be recompiled because another connection has
-** locked the sqlite3_master table, return SQLITE_LOCKED. If any other error
-** occurs, return SQLITE_SCHEMA.
-*/
- int sqlite3Reprepare(Vdbe *p){
-  int rc;
-  sqlite3_stmt *pNew;
-  const char *zSql;
-  sqlite3 *db;
-
-  zSql = sqlite3_sql((sqlite3_stmt *)p);
-  assert( zSql!=0 );  /* Reprepare only called for prepare_v2() statements */
-  db = p.DB()
-  rc = sqlite3LockAndPrepare(db, zSql, -1, 0, p, &pNew, 0);
-  if( rc ){
-    if( rc==SQLITE_NOMEM ){
-      db.mallocFailed = true
-    }
-    assert( pNew==0 );
-    return rc;
-  }else{
-    assert( pNew!=0 );
-  }
-  sqlite3VdbeSwap((Vdbe*)pNew, p);
-  sqlite3TransferBindings(pNew, (sqlite3_stmt*)p);
-  (Vdbe*)(pNew).ResetStepResult()
-  sqlite3VdbeFinalize((Vdbe*)pNew);
-  return SQLITE_OK;
+//	Rerun the compilation of a statement after a schema change.
+//	If the statement is successfully recompiled, return SQLITE_OK. Otherwise, if the statement cannot be recompiled because another connection has locked the sqlite3_master table, return SQLITE_LOCKED. If any other error occurs, return SQLITE_SCHEMA.
+func (p *Vdbe) Reprepare() (rc int) {
+	Sql := sqlite3_sql((sqlite3_stmt *)(p))
+	assert( Sql != "" )				//	Reprepare only called for PrepareV2() statements
+	db := p.DB()
+	var pNew *sqlite3_stmt
+	if pNew, _, rc = db.LockAndPrepare(Sql, false, p); rc != SQLITE_OK {
+		if rc == SQLITE_NOMEM {
+			db.mallocFailed = true
+		}
+		assert( pNew == nil )
+		return
+	} else {
+		assert( pNew != nil )
+	}
+	sqlite3VdbeSwap((Vdbe*)(pNew), p)
+	sqlite3TransferBindings(pNew, (sqlite3_stmt*)(p))
+	(Vdbe*)(pNew).ResetStepResult()
+	(Vdbe*)(pNew).Finalize()
+	return
 }
 
-
-/*
-** Two versions of the official API.  Legacy and new use.  In the legacy
-** version, the original SQL text is not saved in the prepared statement
-** and so if a schema change occurs, SQLITE_SCHEMA is returned by
-** sqlite3_step().  In the new version, the original SQL text is retained
-** and the statement is automatically recompiled if an schema change
-** occurs.
-*/
-func int sqlite3_prepare(
-  sqlite3 *db,              /* Database handle. */
-  const char *zSql,         /* UTF-8 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  sqlite3_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const char **pzTail       /* OUT: End of parsed string */
-){
-  int rc;
-  rc = sqlite3LockAndPrepare(db,zSql,nBytes,0,0,ppStmt,pzTail);
-  assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
-  return rc;
+//	Two versions of the official API. Legacy and new use. In the legacy version, the original SQL text is not saved in the prepared statement and so if a schema change occurs, SQLITE_SCHEMA is returned by sqlite3_step(). In the new version, the original SQL text is retained and the statement is automatically recompiled if an schema change occurs.
+func (db *sqlite3) Prepare(Sql string) (statement *sqlite3_stmt, tail string, rc int) {
+	statement, tail, rc = db.LockAndPrepare(Sql, false, nil)
+	assert( rc == SQLITE_OK || statement == nil )		//	VERIFY: F13021
+	return
 }
-func int sqlite3_prepare_v2(
-  sqlite3 *db,              /* Database handle. */
-  const char *zSql,         /* UTF-8 encoded SQL statement. */
-  int nBytes,               /* Length of zSql in bytes. */
-  sqlite3_stmt **ppStmt,    /* OUT: A pointer to the prepared statement */
-  const char **pzTail       /* OUT: End of parsed string */
-){
-  int rc;
-  rc = sqlite3LockAndPrepare(db,zSql,nBytes,1,0,ppStmt,pzTail);
-  assert( rc==SQLITE_OK || ppStmt==0 || *ppStmt==0 );  /* VERIFY: F13021 */
-  return rc;
+
+func (db *sqlite3) PrepareV2(Sql string) (statement *sqlite3_stmt, tail string, rc int) {
+	statement, tail, rc = db.LockAndPrepare(Sql, true, nil)
+	assert( rc == SQLITE_OK || statement == nil )		//	VERIFY: F13021
+	return
 }

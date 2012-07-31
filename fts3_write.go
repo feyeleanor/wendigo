@@ -365,7 +365,7 @@ static int fts3SqlStmt(
     if( !zSql ){
       rc = SQLITE_NOMEM;
     }else{
-      rc = sqlite3_prepare_v2(p.db, zSql, -1, &pStmt, NULL);
+      pStmt, _, rc = p.db.PrepareV2(zSql)
       zSql = nil
       assert( rc==SQLITE_OK || pStmt==0 );
       p.aStmt[eStmt] = pStmt;
@@ -3224,7 +3224,7 @@ static int fts3DoRebuild(Fts3Table *p){
     if( !zSql ){
       rc = SQLITE_NOMEM;
     }else{
-      rc = sqlite3_prepare_v2(p.db, zSql, -1, &pStmt, 0);
+      pStmt, _, rc = p.db.PrepareV2(zSql)
       zSql = nil
     }
 
@@ -4871,7 +4871,7 @@ static int fts3IntegrityCheck(Fts3Table *p, int *pbOk){
     if( !zSql ){
       rc = SQLITE_NOMEM;
     }else{
-      rc = sqlite3_prepare_v2(p.db, zSql, -1, &pStmt, 0);
+      pStmt, _, rc = p.db.PrepareV2(zSql)
       zSql = nil
     }
 

@@ -2443,8 +2443,7 @@ static void yy_reduce(
         break;
       case 252: /* cmd ::= VACUUM */
       case 253: /* cmd ::= VACUUM nm */
-{sqlite3Vacuum(pParse);}
-        break;
+	  	pParse.Vacuum()
       case 254: /* cmd ::= PRAGMA nm dbnm */
 {sqlite3Pragma(pParse,&yymsp[-1].minor.yy0,&yymsp[0].minor.yy0,0,0);}
         break;

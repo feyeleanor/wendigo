@@ -232,7 +232,7 @@ func (pCsr *VdbeCursor) sorterCompare(bOmitRowid bool, pKey1, pKey2 []byte) (pRe
 		}
 		r2.flags |= UNPACKED_PREFIX_MATCH
 	}
-	return VdbeRecordCompare(pKey1, r2)
+	return pKey1.RecordCompare(r2)
 }
 
 //	This function is called to compare two iterator keys when merging multiple b-tree segments. Parameter iOut is the index of the aTree[] value to recalculate.
