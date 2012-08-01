@@ -395,56 +395,44 @@ func (pBt *BtShared) Pageno(pgno PageNumber) (n PageNumber) {
 //	Write an entry into the pointer map.
 //	This routine updates the pointer map entry for page number 'key' so that it maps to type 'eType' and parent page number 'pgno'.
 //	If *pRC is initially non-zero (non-SQLITE_OK) then this routine is a no-op. If an error occurs, the appropriate error code is written into *pRC.
-func (pBt *BtShared) ptrmapPut(key PageNumber, eType byte, parent PageNumber, pRc *int) {
-static void ptrmapPut(BtShared *pBt, PageNumber key, byte eType, PageNumber parent, int *pRC){
-  DbPage *pDbPage;  /* The pointer map page */
-  byte *pPtrmap;      /* The pointer map data */
-  PageNumber iPtrmap;     /* The pointer map page number */
-  int offset;       /* Offset in pointer map page */
-  int rc;           /* Return code from subfunctions */
+func (pBt *BtShared) Put(key PageNumber, eType byte, parent PageNumber) (rc int) {
+	byte *pPtrmap;      /* The pointer map data */
+	int offset;       /* Offset in pointer map page */
 
-  if( *pRC ) return;
+	//	The master-journal page number must never be used as a pointer map page
+	assert( PTRMAP_ISPAGE(pBt, PAGER_MJ_PGNO(pBt)) == 0 )
 
-  /* The master-journal page number must never be used as a pointer map page */
-  assert( 0==PTRMAP_ISPAGE(pBt, PAGER_MJ_PGNO(pBt)) );
+	assert( pBt.autoVacuum )
+	if key == 0 {
+		return SQLITE_CORRUPT_BKPT
+	}
+	pageno := pBt.Pageno(key)
 
-  assert( pBt.autoVacuum );
-  if( key==0 ){
-    *pRC = SQLITE_CORRUPT_BKPT;
-    return;
-  }
-  iPtrmap = pBt.Pageno(key)
-  if pDbPage, rc = pBt.pPager.Acquire(iPtrmap, false); rc != SQLITE_OK {
-    *pRC = rc;
-    return;
-  }
-  offset = PTRMAP_PTROFFSET(iPtrmap, key);
-  if( offset<0 ){
-    *pRC = SQLITE_CORRUPT_BKPT;
-    goto ptrmap_exit;
-  }
-  assert( offset <= (int)pBt.usableSize-5 );
-  pPtrmap = pDbPage.GetData()
+	var page	*DbPage
+	if page, rc = pBt.pPager.Acquire(pageno, false); rc != SQLITE_OK {
+		return
+	}
+	defer func(){
+		sqlite3PagerUnref(page)
+	}()
 
-  if eType != pPtrmap[offset] || Buffer(pPtrmap[offset + 1:]).ReadUint32() != parent {
-    *pRC= rc = sqlite3PagerWrite(pDbPage);
-    if( rc==SQLITE_OK ){
-      pPtrmap[offset] = eType;
-      Buffer(pPtrmap[offset + 1:]).WriteUint32(parent)
-    }
-  }
+	offset := PTRMAP_PTROFFSET(pageno, key)
+	if offset < 0 {
+		return SQLITE_CORRUPT_BKPT
+	}
+	assert( offset <= int(pBt.usableSize) - 5 )
+	map := page.GetData()
 
-ptrmap_exit:
-  sqlite3PagerUnref(pDbPage);
+	if eType != map[offset] || Buffer(map[offset + 1:]).ReadUint32() != parent {
+		if rc = sqlite3PagerWrite(page); rc == SQLITE_OK {
+			map[offset] = eType
+			Buffer(map[offset + 1:]).WriteUint32(parent)
+		}
+	}
 }
 
-/*
-** Read an entry from the pointer map.
-**
-** This routine retrieves the pointer map entry for page 'key', writing
-** the type and parent page number to *pEType and *pPageNumber respectively.
-** An error code is returned if something goes wrong, otherwise SQLITE_OK.
-*/
+//	Read an entry from the pointer map.
+//	This routine retrieves the pointer map entry for page 'key', writing the type and parent page number to *pEType and *pPageNumber respectively. An error code is returned if something goes wrong, otherwise SQLITE_OK.
 static int ptrmapGet(BtShared *pBt, PageNumber key, byte *pEType, PageNumber *pPageNumber){
   DbPage *pDbPage;   /* The pointer map page */
   int iPtrmap;       /* Pointer map page index */
@@ -514,23 +502,21 @@ func (pPage *MemoryPage) cellSize(pCell Buffer) uint16 {
 }
 
 //	If the cell pCell, part of page pPage contains a pointer to an overflow page, insert an entry into the pointer-map for the overflow page.
-func (pPage *MemoryPage) PtrmapPutOvflPtr(pCell []byte, pRC *int) {
-static void ptrmapPutOvflPtr(MemoryPage *pPage, byte *pCell, int *pRC){
-	info	CellInfo
-	if *pRC != SQLITE_OK {
-		return
-	}
-	assert( pCell != 0 )
-	info.ParsePtr(pPage, pCell)
-	if pPage.intKey {
+func (p *MemoryPage) PutOvflPtr(cell []byte) (rc int) {
+	assert( cell != nil )
+
+	var info	CellInfo
+	info.ParsePtr(p, cell)
+	if p.intKey {
 		assert( info.nData == info.nPayload )
 	} else {
 		assert( info.nData + info.nKey == info.nPayload )
 	}
 	if info.iOverflow != 0 {
-		ovfl = PageNumber(Buffer(pCell[info.iOverflow:]).ReadUint32())
-		ptrmapPut(pPage.pBt, ovfl, PTRMAP_OVERFLOW1, pPage.pgno, pRC)
+		ovfl = PageNumber(Buffer(cell[info.iOverflow:]).ReadUint32())
+		rc = p.pBt.Put(ovfl, PTRMAP_OVERFLOW1, p.pgno)
 	}
+	return
 }
 
 //	Allocate nByte bytes of space from within the B-Tree page passed as the first argument. Write into *pIdx the index into pPage.aData[] of the first byte of allocated space. Return either SQLITE_OK or an error code (usually SQLITE_CORRUPT).
@@ -1755,21 +1741,21 @@ static int setChildPtrmaps(MemoryPage *pPage){
 
   for(i=0; i<nCell; i++){
     pCell := pPage.FindCell(i)
-    ptrmapPutOvflPtr(pPage, pCell, &rc);
-    if( !pPage.leaf ){
-      PageNumber childPageNumber = Buffer(pCell).ReadUint32()
-      ptrmapPut(pBt, childPageNumber, PTRMAP_BTREE, pgno, &rc);
+	rc = pPage.PutOvflPtr(pCell)
+    if !pPage.leaf {
+      childPageNumber := Buffer(pCell).ReadUint32()
+      rc = pBt.Put(childPageNumber, PTRMAP_BTREE, pgno)
     }
   }
 
-  if( !pPage.leaf ){
-    PageNumber childPageNumber = Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
-    ptrmapPut(pBt, childPageNumber, PTRMAP_BTREE, pgno, &rc);
+  if !pPage.leaf {
+    childPageNumber := Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
+    rc = pBt.Put(childPageNumber, PTRMAP_BTREE, pgno)
   }
 
 set_child_ptrmaps_out:
-  pPage.isInit = isInitOrig;
-  return rc;
+	pPage.isInit = isInitOrig
+	return rc
 }
 
 /*
@@ -1879,9 +1865,8 @@ static int relocatePage(
   }else{
     PageNumber nextOvfl = Buffer(pDbPage.aData).ReadUint32()
     if( nextOvfl!=0 ){
-      ptrmapPut(pBt, nextOvfl, PTRMAP_OVERFLOW2, iFreePage, &rc);
-      if( rc!=SQLITE_OK ){
-        return rc;
+      if rc = pBt.Put(nextOvfl, PTRMAP_OVERFLOW2, iFreePage); rc != SQLITE_OK {
+        return rc
       }
     }
   }
@@ -1901,8 +1886,8 @@ static int relocatePage(
     }
     rc = modifyPagePointer(pPtrPage, iDbPage, iFreePage, eType);
     pPtrPage.Release()
-    if( rc==SQLITE_OK ){
-      ptrmapPut(pBt, iFreePage, eType, iPtrPage, &rc);
+    if rc == SQLITE_OK {
+      rc = pBt.Put(iFreePage, eType, iPtrPage)
     }
   }
   return rc;
@@ -3813,13 +3798,12 @@ static int freePage2(BtShared *pBt, MemoryPage *pMemoryPage, PageNumber iPage){
 		memset(pPage.aData, 0, pPage.pBt.pageSize);
 	}
 
-  /* If the database supports auto-vacuum, write an entry in the pointer-map
-  ** to indicate that the page is free.
-  */
-  if( pBt.autoVacuum ){
-    ptrmapPut(pBt, iPage, PTRMAP_FREEPAGE, 0, &rc);
-    if( rc ) goto freepage_out;
-  }
+	//	If the database supports auto-vacuum, write an entry in the pointer-map to indicate that the page is free.
+	if pBt.autoVacuum {
+		if rc = pBt.Put(iPage, PTRMAP_FREEPAGE, 0); rc != SQLITE_OK {
+			goto freepage_out
+		}
+	}
 
   /* Now manipulate the actual database free-list structure. There are two
   ** possibilities. If the free-list is currently empty, or if the first
@@ -4039,27 +4023,22 @@ static int fillInCell(
         );
       }
       rc = allocateBtreePage(pBt, &pOvfl, &pgnoOvfl, pgnoOvfl, 0);
-      /* If the database supports auto-vacuum, and the second or subsequent
-      ** overflow page is being allocated, add an entry to the pointer-map
-      ** for that page now. 
-      **
-      ** If this is the first overflow page, then write a partial entry 
-      ** to the pointer-map. If we write nothing to this pointer-map slot,
-      ** then the optimistic overflow chain processing in clearCell()
-      ** may misinterpret the uninitialised values and delete the
-      ** wrong pages from the database.
-      */
-      if( pBt.autoVacuum && rc==SQLITE_OK ){
-        byte eType = (pgnoPtrmap?PTRMAP_OVERFLOW2:PTRMAP_OVERFLOW1);
-        ptrmapPut(pBt, pgnoOvfl, eType, pgnoPtrmap, &rc);
-        if( rc ){
-          pOvfl.Release()
-        }
-      }
-      if( rc ){
-        pToRelease.Release()
-        return rc;
-      }
+		//	If the database supports auto-vacuum, and the second or subsequent overflow page is being allocated, add an entry to the pointer-map for that page now. 
+		//	If this is the first overflow page, then write a partial entry to the pointer-map. If we write nothing to this pointer-map slot, then the optimistic overflow chain processing in clearCell() may misinterpret the uninitialised values and delete the wrong pages from the database.
+		if pBt.autoVacuum && rc == SQLITE_OK {
+			if pgnoPtrmap == 0 {
+				rc = pBt.Put(pgnoOvfl, PTRMAP_OVERFLOW1, pgnoPtrmap)
+			} else {
+				rc = pBt.Put(pgnoOvfl, PTRMAP_OVERFLOW2, pgnoPtrmap)
+			}
+			if rc != SQLITE_OK {
+				pOvfl.Release()
+			}
+		}
+		if rc != SQLITE_OK {
+			pToRelease.Release()
+			return rc
+		}
 
       /* If pToRelease is not zero than pPrior points into the data area
       ** of pToRelease.  Make sure pToRelease is still writeable. */
@@ -4193,7 +4172,7 @@ func (pPage *MemoryPage) InsertCell(i int, cell, temp_space Buffer, child PageNu
 				data[pPage.hdrOffset + 3:].WriteUint16(pPage.nCell)
 				if pPage.pBt.autoVacuum {
 					//	The cell may contain a pointer to an overflow page. If so, write the entry for the overflow page into the pointer map.
-					ptrmapPutOvflPtr(pPage, cell, pRC)
+					pRC = pPage.PutOvflPtr(cell)
 				}
 			}
 		}
@@ -4307,21 +4286,13 @@ static int balance_quick(MemoryPage *pParent, MemoryPage *pPage, byte *pSpace){
     zeroPage(pNew, PTF_INTKEY|PTF_LEAFDATA|PTF_LEAF);
     assemblePage(pNew, 1, &pCell, &szCell);
 
-    /* If this is an auto-vacuum database, update the pointer map
-    ** with entries for the new page, and any pointer from the 
-    ** cell on the page to an overflow page. If either of these
-    ** operations fails, the return code is set, but the contents
-    ** of the parent page are still manipulated by thh code below.
-    ** That is Ok, at this point the parent page is guaranteed to
-    ** be marked as dirty. Returning an error code will cause a
-    ** rollback, undoing any changes made to the parent page.
-    */
-    if( pBt.autoVacuum ){
-      ptrmapPut(pBt, pgnoNew, PTRMAP_BTREE, pParent.pgno, &rc);
-      if( szCell>pNew.minLocal ){
-        ptrmapPutOvflPtr(pNew, pCell, &rc);
-      }
-    }
+	//	If this is an auto-vacuum database, update the pointer map with entries for the new page, and any pointer from the cell on the page to an overflow page. If either of these operations fails, the return code is set, but the contents of the parent page are still manipulated by thh code below. That is Ok, at this point the parent page is guaranteed to be marked as dirty. Returning an error code will cause a rollback, undoing any changes made to the parent page.
+	if pBt.autoVacuum {
+		rc = pBt.Put(pgnoNew, PTRMAP_BTREE, pParent.pgno)
+		if szCell > pNew.minLocal {
+			rc = pNew.PutOvflPtr(pCell)
+		}
+	}
 
 	//	Create a divider cell to insert into pParent. The divider cell consists of a 4-byte page number (the page number of pPage) and a variable length key value (which must be the same value as the largest key on pPage).
 	//	To find the largest key value on pPage, first find the right-most cell on pPage. The first two fields of this cell are the record-length (a variable length integer at most 32-bits in size) and the key value (a variable length integer, may have any value). The first of the while(...) loops below skips over the record-length field. The second while(...) loop copies the key value from the cell on pPage into the pSpace buffer.
@@ -4661,8 +4632,7 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 
 			//	Set the pointer-map entry for the new sibling page.
 			if pBt.autoVacuum {
-				ptrmapPut(pBt, pNew.pgno, PTRMAP_BTREE, pParent.pgno, &rc)
-				if rc != SQLITE_OK {
+				if rc = pBt.Put(pNew.pgno, PTRMAP_BTREE, pParent.pgno); rc != SQLITE_OK {
 					goto balance_cleanup
 				}
 			}
@@ -4824,10 +4794,10 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 			//	If the cell was originally divider cell (and is not now) or an overflow cell, or if the cell was located on a different sibling page before the balancing, then the pointer map entries associated with any child or overflow pages need to be updated.
 			if isDivider || pOld.pgno != pNew.pgno {
 				if !leafCorrection {
-					ptrmapPut(pBt, Buffer(apCell[i:]).ReadUint32(), PTRMAP_BTREE, pNew.pgno, &rc)
+					rc = pBt.Put(Buffer(apCell[i:]).ReadUint32(), PTRMAP_BTREE, pNew.pgno)
 				}
 				if szCell[i] > pNew.minLocal {
-					ptrmapPutOvflPtr(pNew, apCell[i], &rc)
+					rc = pNew.PutOvflPtr(apCell[i])
 				}
 			}
 		}
@@ -4835,7 +4805,7 @@ func (pParent *MemoryPage) BalanceNonroot(iParentIdx int, aOvflSpace []byte, isR
 		if !leafCorrection {
 			for i = 0; i < nNew; i++ {
 				uint32 key = Buffer(apNew[i].aData[8:]).ReadUint32()
-				ptrmapPut(pBt, key, PTRMAP_BTREE, apNew[i].pgno, &rc)
+				rc = pBt.Put(key, PTRMAP_BTREE, apNew[i].pgno)
 			}
 		}
 	}
@@ -4882,24 +4852,20 @@ static int balance_deeper(MemoryPage *pRoot, MemoryPage **ppChild){
 
   assert( pRoot.nOverflow>0 );
 
-  /* Make pRoot, the root page of the b-tree, writable. Allocate a new 
-  ** page that will become the new right-child of pPage. Copy the contents
-  ** of the node stored on pRoot into the new child page.
-  */
-  rc = sqlite3PagerWrite(pRoot.pDbPage);
-  if( rc==SQLITE_OK ){
-    rc = allocateBtreePage(pBt,&pChild,&pgnoChild,pRoot.pgno,0);
-    copyNodeContent(pRoot, pChild, &rc);
-    if( pBt.autoVacuum ){
-      ptrmapPut(pBt, pgnoChild, PTRMAP_BTREE, pRoot.pgno, &rc);
-    }
-  }
-  if( rc ){
-    *ppChild = 0;
-    pChild.Release()
-    return rc;
-  }
-  assert( pChild.nCell==pRoot.nCell );
+	//	Make pRoot, the root page of the b-tree, writable. Allocate a new page that will become the new right-child of pPage. Copy the contents of the node stored on pRoot into the new child page.
+	if rc = sqlite3PagerWrite(pRoot.pDbPage); rc == SQLITE_OK {
+		rc = allocateBtreePage(pBt,&pChild,&pgnoChild,pRoot.pgno,0)
+		copyNodeContent(pRoot, pChild, &rc)
+		if pBt.autoVacuum {
+			rc = pBt.Put(pgnoChild, PTRMAP_BTREE, pRoot.pgno)
+		}
+	}
+	if rc != SQLITE_OK {
+		*ppChild = 0
+		pChild.Release()
+		return rc
+	}
+	assert( pChild.nCell == pRoot.nCell )
 
   /* Copy the overflow cells from pRoot to pChild */
   memcpy(pChild.aiOvfl, pRoot.aiOvfl,
@@ -5157,10 +5123,9 @@ static int btreeCreateTable(Btree *p, int *piTable, int createTabFlags){
     } 
 
     /* Update the pointer-map and meta-data with the new root-page number. */
-    ptrmapPut(pBt, RootPage, PTRMAP_ROOTPAGE, 0, &rc);
-    if( rc ){
-      pRoot.Release()
-      return rc;
+	if rc = pBt.Put(RootPage, PTRMAP_ROOTPAGE, 0); rc != SQLITE_OK {
+		pRoot.Release()
+		return rc
     }
 
     /* When the new root page was allocated, page 1 was made writable in
