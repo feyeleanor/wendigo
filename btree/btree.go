@@ -433,32 +433,28 @@ func (pBt *BtShared) Put(key PageNumber, eType byte, parent PageNumber) (rc int)
 
 //	Read an entry from the pointer map.
 //	This routine retrieves the pointer map entry for page 'key', writing the type and parent page number to *pEType and *pPageNumber respectively. An error code is returned if something goes wrong, otherwise SQLITE_OK.
-static int ptrmapGet(BtShared *pBt, PageNumber key, byte *pEType, PageNumber *pPageNumber){
-  DbPage *pDbPage;   /* The pointer map page */
-  int iPtrmap;       /* Pointer map page index */
-  byte *pPtrmap;       /* Pointer map page data */
-  int offset;        /* Offset of entry in pointer map */
-  int rc;
+func (pBt *BtShared) Get(key PageNumber) (eType byte, pgno PageNumber, rc int) {
+	var page	*DbPage
+	index := pBt.Pageno(key)
+	if page, rc = pBt.pPager.Acquire(index, false); rc != SQLITE_OK {
+		return
+	}
+	data = page.GetData()
 
-  iPtrmap = pBt.Pageno(key)
-  if pDbPage, rc = pBt.pPager.Acquire(iPtrmap, false); rc != SQLITE_OK {
-    return rc;
-  }
-  pPtrmap = pDbPage.GetData()
+	offset := PTRMAP_PTROFFSET(index, key)
+	if offset < 0 {
+		sqlite3PagerUnref(page)
+		return SQLITE_CORRUPT_BKPT
+	}
+	assert( offset <= int(pBt.usableSize - 5) )
+	eType = data[offset]
+	pgno = Buffer(data[offset + 1:]).ReadUint32()
 
-  offset = PTRMAP_PTROFFSET(iPtrmap, key);
-  if( offset<0 ){
-    sqlite3PagerUnref(pDbPage);
-    return SQLITE_CORRUPT_BKPT;
-  }
-  assert( offset <= (int)pBt.usableSize-5 );
-  assert( pEType!=0 );
-  *pEType = pPtrmap[offset];
-  if( pPageNumber ) *pPageNumber = Buffer(pPtrmap[offset + 1:]).ReadUint32()
-
-  sqlite3PagerUnref(pDbPage);
-  if( *pEType<1 || *pEType>5 ) return SQLITE_CORRUPT_BKPT;
-  return SQLITE_OK;
+	sqlite3PagerUnref(page)
+	if eType < 1 || eType > 5 {
+		rc = SQLITE_CORRUPT_BKPT
+	}
+	return
 }
 
 
@@ -1726,36 +1722,31 @@ trans_begun:
 ** map entries for the overflow pages as well.
 */
 static int setChildPtrmaps(MemoryPage *pPage){
-  int i;                             /* Counter variable */
-  int nCell;                         /* Number of cells in page pPage */
-  int rc;                            /* Return code */
-  BtShared *pBt = pPage.pBt;
-  byte isInitOrig = pPage.isInit;
-  PageNumber pgno = pPage.pgno;
+	int i;                             /* Counter variable */
+	int nCell;                         /* Number of cells in page pPage */
+	int rc;                            /* Return code */
+	BtShared *pBt = pPage.pBt;
+	byte isInitOrig = pPage.isInit;
+	PageNumber pgno = pPage.pgno;
 
-  rc = pPage.Initialize()
-  if( rc!=SQLITE_OK ){
-    goto set_child_ptrmaps_out;
-  }
-  nCell = pPage.nCell;
+	if rc = pPage.Initialize(); rc == SQLITE_OK {
+		nCell = pPage.nCell;
 
-  for(i=0; i<nCell; i++){
-    pCell := pPage.FindCell(i)
-	rc = pPage.PutOvflPtr(pCell)
-    if !pPage.leaf {
-      childPageNumber := Buffer(pCell).ReadUint32()
-      rc = pBt.Put(childPageNumber, PTRMAP_BTREE, pgno)
-    }
-  }
+		for(i=0; i<nCell; i++){
+			pCell := pPage.FindCell(i)
+			rc = pPage.PutOvflPtr(pCell)
+			if !pPage.leaf {
+				childPageNumber := Buffer(pCell).ReadUint32()
+				rc = pBt.Put(childPageNumber, PTRMAP_BTREE, pgno)
+			}
+		}
 
-  if !pPage.leaf {
-    childPageNumber := Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
-    rc = pBt.Put(childPageNumber, PTRMAP_BTREE, pgno)
-  }
-
-set_child_ptrmaps_out:
+		if !pPage.leaf {
+			childPageNumber := Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
+			rc = pBt.Put(childPageNumber, PTRMAP_BTREE, pgno)
+		}
+	}
 	pPage.isInit = isInitOrig
-	return rc
 }
 
 /*
@@ -1929,7 +1920,7 @@ static int incrVacuumStep(BtShared *pBt, PageNumber nFin, PageNumber iLastPg){
       return SQLITE_DONE;
     }
 
-    rc = ptrmapGet(pBt, iLastPg, &eType, &iPtrPage);
+    eType, iPtrPage, rc = pBt.Get(iLastPg)
     if( rc!=SQLITE_OK ){
       return rc;
     }
@@ -2666,7 +2657,7 @@ static int getOverflowPage(
     }
 
     if( iGuess<=btreePagecount(pBt) ){
-      rc = ptrmapGet(pBt, iGuess, &eType, &pgno);
+      eType, pgno, rc = pBt.Get(iGuess)
       if( rc==SQLITE_OK && eType==PTRMAP_OVERFLOW2 && pgno==ovfl ){
         next = iGuess;
         rc = SQLITE_DONE;
@@ -3536,7 +3527,7 @@ static int allocateBtreePage(
       byte eType;
       assert( nearby>0 );
       assert( pBt.autoVacuum );
-      rc = ptrmapGet(pBt, nearby, &eType, 0);
+      eType, _, rc = pBt.Get(nearby)
       if( rc ) return rc;
       if( eType==PTRMAP_FREEPAGE ){
         searchList = 1;
@@ -5093,7 +5084,7 @@ static int btreeCreateTable(Btree *p, int *piTable, int createTabFlags){
       pRoot, rc = pBt.GetPage(RootPage, false); rc != SQLITE_OK {
         return
       }
-      rc = ptrmapGet(pBt, RootPage, &eType, &iPtrPage);
+      eType, iPtrPage, rc = pBt.Get(RootPage)
       if( eType==PTRMAP_ROOTPAGE || eType==PTRMAP_FREEPAGE ){
         rc = SQLITE_CORRUPT_BKPT;
       }
@@ -5564,21 +5555,18 @@ static void checkPtrmap(
   PageNumber iParent,          /* Expected pointer map parent page number */
   char *zContext         /* Context description (used for error msg) */
 ){
-  int rc;
-  byte ePtrmapType;
-  PageNumber iPtrmapParent;
+	int rc;
+	byte ePtrmapType;
+	PageNumber iPtrmapParent;
 
-  rc = ptrmapGet(pCheck.pBt, iChild, &ePtrmapType, &iPtrmapParent);
-  if( rc!=SQLITE_OK ){
-    checkAppendMsg(pCheck, zContext, "Failed to read ptrmap key=%d", iChild);
-    return;
-  }
+	if ePtrmapType, iPtrmapParent, rc = pCheck.pBt.Get(iChild); rc != SQLITE_OK {
+		checkAppendMsg(pCheck, zContext, "Failed to read ptrmap key=%d", iChild)
+		return
+	}
 
-  if( ePtrmapType!=eType || iPtrmapParent!=iParent ){
-    checkAppendMsg(pCheck, zContext, 
-      "Bad ptr map entry key=%d expected=(%d,%d) got=(%d,%d)", 
-      iChild, eType, iParent, ePtrmapType, iPtrmapParent);
-  }
+	if ePtrmapType != eType || iPtrmapParent != iParent {
+		checkAppendMsg(pCheck, zContext, "Bad ptr map entry key=%d expected=(%d,%d) got=(%d,%d)", iChild, eType, iParent, ePtrmapType, iPtrmapParent)
+	}
 }
 
 /*
