@@ -35,7 +35,7 @@
 //
 //		OFFSET   SIZE    DESCRIPTION
 //		   0      16     Header string: "SQLite format 3\000"
-//		  16       2     Page size in bytes.  
+//		  16       2     Page size in bytes.
 //		  18       1     File format write version
 //		  19       1     File format read version
 //		  20       1     Bytes of unused space at the end of each page
@@ -224,32 +224,27 @@ const	BTCURSOR_MAX_DEPTH	= 20
 
 //	These macros define the location of the pointer-map entry for a database page. The first argument to each is the number of usable bytes on each page of the database (often 1024). The second is the page number to look up in the pointer map.
 //
-//	PTRMAP_PTROFFSET returns the offset of the requested map entry.
+//	ptrmap_ptroffset returns the offset of the requested map entry.
 //
-//	If the pgno argument passed to BtShared::Pageno is a pointer-map page, then pgno is returned. So (pgno == pgsz.Pageno(pgno)) can be	used to test if pgno is a pointer-map page. PTRMAP_ISPAGE implements this test.
-#define PTRMAP_PTROFFSET(pgptrmap, pgno) (5*(pgno-pgptrmap-1))
-#define PTRMAP_ISPAGE(pBt, pgno) (pBt.Pageno(pgno) == pgno)
+//	If the pgno argument passed to BtShared::Pageno is a pointer-map page, then pgno is returned. So (pgno == pgsz.Pageno(pgno)) can be	used to test if pgno is a pointer-map page. BtShared::IsMapPage implements this test.
+func ptrmap_ptroffset(pgptrmap, pgno PageNumber) PageNumber {
+	return 5 * (pgno - pgptrmap - 1)
+}
+
+func (pBt *BtShared) IsMapPage(pgno PageNumber) bool {
+	return pBt.Pageno(pgno) == pgno
+}
 
 //	The pointer map is a lookup table that identifies the parent page for each child page in the database file. The parent page is the page that contains a pointer to the child. Every page in the database contains 0 or 1 parent pages. (In this context 'database page' refers to any page that is not part of the pointer map itself.) Each pointer map entry consists of a single byte 'type' and a 4 byte parent page number.
-//	The PTRMAP_XXX identifiers below are the valid types.
+//	The identifiers below are the valid types.
 //
-//	The purpose of the pointer map is to facility moving pages from one position in the file to another as part of autovacuum. When a page is moved, the pointer in its parent must be updated to point to the new location. The pointer map is used to locate the parent page quickly.
-//
-//	PTRMAP_ROOTPAGE: The database page is a root-page. The page-number is not used in this case.
-//
-//	PTRMAP_FREEPAGE: The database page is an unused (free) page. The page-number is not used in this case.
-//
-//	PTRMAP_OVERFLOW1: The database page is the first page in a list of overflow pages. The page number identifies the page that contains the cell with a pointer to this overflow page.
-//
-//	PTRMAP_OVERFLOW2: The database page is the second or later page in a list of overflow pages. The page-number identifies the previous page in the overflow page list.
-//
-//	PTRMAP_BTREE: The database page is a non-root btree page. The page number identifies the parent page in the btree.
+//	The purpose of the pointer map is to facilitate moving pages from one position in the file to another as part of autovacuum. When a page is moved, the pointer in its parent must be updated to point to the new location. The pointer map is used to locate the parent page quickly.
 const(
-	PTRMAP_ROOTPAGE		= 1
-	PTRMAP_FREEPAGE 	= iota
-	PTRMAP_OVERFLOW1
-	PTRMAP_OVERFLOW2
-	PTRMAP_BTREE
+	ROOT_PAGE					= iota		//	The database page is a root-page. The page-number is not used in this case.
+	FREE_PAGE								//	The database page is an unused (free) page. The page-number is not used in this case.
+	FIRST_OVERFLOW_PAGE						//	The database page is the first page in a list of overflow pages. The page number identifies the page that contains the cell with a pointer to this overflow page.
+	SECONDARY_OVERFLOW_PAGE					//	The database page is the second or later page in a list of overflow pages. The page-number identifies the previous page in the overflow page list.
+	NON_ROOT_BTREE_PAGE						//	The database page is a non-root btree page. The page number identifies the parent page in the btree.
 )
 
 //	A bunch of assert() statements to check the transaction state variables of handle p (type Btree*) are internally consistent.

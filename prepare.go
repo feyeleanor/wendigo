@@ -233,7 +233,7 @@ func (db *sqlite3) InitOne(iDb int, ErrMsg string) (rc int) {
 	//	Jump here for an error that occurs after successfully allocating curMain and calling Lock(). For an error that occurs before that point, jump to error_out.
 initone_error_out:
 	if openedTransaction {
-		sqlite3BtreeCommit(pDb.pBt)
+		pDb.pBt.Commit()
 	}
 	pDb.pBt.Unlock()
 
@@ -248,7 +248,7 @@ error_out:
 //	After a database is initialized, the DB_SchemaLoaded bit is set bit is set in the flags field of the Db structure. If the database file was of zero-length, then the DB_Empty flag is also set.
 func (db *sqlite3) Init(ErrMsg string) (rc int) {
 	commit_internal := !(db.flags & SQLITE_InternChanges)
-  
+
 	rc = SQLITE_OK
 	db.init.busy = true
 	for i, database := range db.Databases {
@@ -320,7 +320,7 @@ func (pParse *Parse) schemaIsValid() (rc int) {
 
 			//	Close the transaction, if one was opened.
 			if openedTransaction {
-				sqlite3BtreeCommit(pBt);
+				pBt.Commit()
 			}
 		}
 	}

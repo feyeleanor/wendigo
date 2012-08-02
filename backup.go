@@ -1,4 +1,4 @@
-/* This file contains the implementation of the sqlite3_backup_XXX() 
+/* This file contains the implementation of the sqlite3_backup_XXX()
 ** API functions and the related features.
 */
 
@@ -39,15 +39,15 @@ struct sqlite3_backup {
 **   Once it has been created using backup_init(), a single sqlite3_backup
 **   structure may be accessed via two groups of thread-safe entry points:
 **
-**     * Via the sqlite3_backup_XXX() API function backup::step() and 
+**     * Via the sqlite3_backup_XXX() API function backup::step() and
 **       backup::finish(). Both these functions obtain the source database
-**       handle mutex and the mutex associated with the source BtShared 
+**       handle mutex and the mutex associated with the source BtShared
 **       structure, in that order.
 **
 **     * Via the BackupUpdate() and BackupRestart() functions, which are
 **       invoked by the pager layer to report various state changes in
 **       the page cache associated with the source database. The mutex
-**       associated with the source database BtShared structure will always 
+**       associated with the source database BtShared structure will always
 **       be held when either of these functions are invoked.
 **
 **   The other sqlite3_backup_XXX() API functions, backup_remaining() and
@@ -127,7 +127,7 @@ func (destination *sqlite3) backup_init(zDestDb string, source *sqlite3, zSrcDb 
 }
 
 /*
-** Argument rc is an SQLite error code. Return true if this error is 
+** Argument rc is an SQLite error code. Return true if this error is
 ** considered fatal if encountered during a backup operation. All errors
 ** are considered fatal except for SQLITE_BUSY and SQLITE_LOCKED.
 */
@@ -136,8 +136,8 @@ static int isFatalError(int rc){
 }
 
 /*
-** Parameter zSrcData points to a buffer containing the data for 
-** page iSrcPg from the source database. Copy this data into the 
+** Parameter zSrcData points to a buffer containing the data for
+** page iSrcPg from the source database. Copy this data into the
 ** destination database.
 */
 static int backupOnePage(sqlite3_backup *p, PageNumber iSrcPg, const byte *zSrcData){
@@ -158,7 +158,7 @@ static int backupOnePage(sqlite3_backup *p, PageNumber iSrcPg, const byte *zSrcD
   assert( zSrcData );
 
   /* Catch the case where the destination is an in-memory database and the
-  ** page sizes of the source and destination differ. 
+  ** page sizes of the source and destination differ.
   */
   if( nSrcPgsz!=nDestPgsz && sqlite3PagerIsMemdb(pDestPager) ){
     rc = SQLITE_READONLY;
@@ -212,7 +212,7 @@ static int backupOnePage(sqlite3_backup *p, PageNumber iSrcPg, const byte *zSrcD
 ** exactly iSize bytes. If pFile is not larger than iSize bytes, then
 ** this function is a no-op.
 **
-** Return SQLITE_OK if everything is successful, or an SQLite error 
+** Return SQLITE_OK if everything is successful, or an SQLite error
 ** code if an error occurs.
 */
 static int backupTruncateFile(sqlite3_file *pFile, int64 iSize){
@@ -284,7 +284,7 @@ func (p *sqlite3_backup) step(pages int) (rc int) {
 			if rc == SQLITE_OK && destMode == PAGER_JOURNALMODE_WAL && pgszSrc != pgszDest {
 				rc = SQLITE_READONLY
 			}
-  
+
 			//	Now that there is a read-lock on the source database, query the source pager for the number of pages in the database.
 			nSrcPage = int(sqlite3BtreeLastPage(p.pSrc))
 			assert( nSrcPage >= 0 )
@@ -308,7 +308,7 @@ func (p *sqlite3_backup) step(pages int) (rc int) {
 					attachBackupObject(p)
 				}
 			}
-  
+
 			//	Update the schema version field in the destination database. This is to make sure that the schema-version really does change in the case where the source and destination databases have the same schema version.
 			if rc == SQLITE_DONE {
 				if rc = sqlite3BtreeUpdateMeta(p.pDest, 1, p.iDestSchema + 1); rc == SQLITE_OK {
@@ -321,7 +321,7 @@ func (p *sqlite3_backup) step(pages int) (rc int) {
 				}
 				if rc == SQLITE_OK {
 					int nDestTruncate
-					//	Set nDestTruncate to the final number of pages in the destination database. The complication here is that the destination page size may be different to the source page size. 
+					//	Set nDestTruncate to the final number of pages in the destination database. The complication here is that the destination page size may be different to the source page size.
 					//	If the source page size is smaller than the destination page size, round up. In this case the call to sqlite3OsTruncate() below will fix the size of the file. However it is important to call sqlite3PagerTruncateImage() here so that any pages in the destination file that lie beyond the nDestTruncate page mark are journalled by PagerCommitPhaseOne() before they are destroyed by the file truncation.
 					assert( pgszSrc == sqlite3BtreeGetPageSize(p.pSrc) )
 					assert( pgszDest == sqlite3BtreeGetPageSize(p.pDest) )
@@ -372,22 +372,22 @@ func (p *sqlite3_backup) step(pages int) (rc int) {
 					} else {
 						rc = sqlite3PagerCommitPhaseOne(pDestPager, 0, 0)
 					}
-    
+
 					//	Finish committing the transaction to the destination database.
 					if rc == SQLITE_OK {
-						if rc = sqlite3BtreeCommitPhaseTwo(p.pDest, 0); rc == SQLITE_OK {
+						if rc = p.pDest.CommitPhaseTwo(false); rc == SQLITE_OK {
 							rc = SQLITE_DONE
 						}
 					}
 				}
 			}
-  
+
 			//	If bCloseTrans is true, then this function opened a read transaction on the source database. Close the read transaction here. There is no need to check the return values of the btree methods here, as "committing" a read-only transaction cannot fail.
 			if bCloseTrans {
-				sqlite3BtreeCommitPhaseOne(p.pSrc, 0)
-				sqlite3BtreeCommitPhaseTwo(p.pSrc, 0)
+				p.pSrc.CommitPhaseOne("")
+				p.pSrc.CommitPhaseTwo(false)
 			}
-  
+
 			if rc == SQLITE_IOERR_NOMEM {
 				rc = SQLITE_NOMEM
 			}
@@ -455,7 +455,7 @@ func int sqlite3_backup_remaining(sqlite3_backup *p){
 }
 
 /*
-** Return the total number of pages in the source database as of the most 
+** Return the total number of pages in the source database as of the most
 ** recent call to backup::step().
 */
 func int sqlite3_backup_pagecount(sqlite3_backup *p){
@@ -464,7 +464,7 @@ func int sqlite3_backup_pagecount(sqlite3_backup *p){
 
 /*
 ** This function is called after the contents of page iPage of the
-** source database have been modified. If page iPage has already been 
+** source database have been modified. If page iPage has already been
 ** copied into the destination database, then the data written to the
 ** destination is now invalidated. The destination copy of iPage needs
 ** to be updated with the new data before the backup operation is
@@ -499,7 +499,7 @@ func int sqlite3_backup_pagecount(sqlite3_backup *p){
 ** Restart the backup process. This is called when the pager layer
 ** detects that the database has been modified by an external database
 ** connection. In this case there is no way of knowing which of the
-** pages that have been copied into the destination database are still 
+** pages that have been copied into the destination database are still
 ** valid and which are not, so the entire process needs to be restarted.
 **
 ** It is assumed that the mutex associated with the BtShared object
@@ -518,8 +518,8 @@ func int sqlite3_backup_pagecount(sqlite3_backup *p){
 ** Copy the complete content of pBtFrom into pBtTo.  A transaction
 ** must be active for both files.
 **
-** The size of file pTo may be reduced by this operation. If anything 
-** goes wrong, the transaction on pTo is rolled back. If successful, the 
+** The size of file pTo may be reduced by this operation. If anything
+** goes wrong, the transaction on pTo is rolled back. If successful, the
 ** transaction is committed before returning.
 */
  int sqlite3BtreeCopyFile(Btree *pTo, Btree *pFrom){
@@ -551,9 +551,9 @@ func int sqlite3_backup_pagecount(sqlite3_backup *p){
 
   /* 0x7FFFFFFF is the hard limit for the number of pages in a database
   ** file. By passing this as the number of pages to copy to
-  ** backup::step(), we can guarantee that the copy finishes 
+  ** backup::step(), we can guarantee that the copy finishes
   ** within a single call (unless an error occurs). The assert() statement
-  ** checks this assumption - (p.rc) should be set to either SQLITE_DONE 
+  ** checks this assumption - (p.rc) should be set to either SQLITE_DONE
   ** or an error code.
   */
   b.step(0x7FFFFFFF)

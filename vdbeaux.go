@@ -438,7 +438,7 @@ func (p *Vdbe) ChangeToNoop(addr int) {
 ** routine, then a pointer to a dummy VdbeOp will be returned.  That opcode
 ** is readable but not writable, though it is cast to a writable value.
 ** The return of a dummy opcode allows the call to continue functioning
-** after a OOM fault without having to check to see if the return from 
+** after a OOM fault without having to check to see if the return from
 ** this routine is a valid pointer.  But because the dummy.opcode is 0,
 ** dummy will never be written to.  This is verified by code inspection and
 ** by running with Valgrind.
@@ -641,7 +641,7 @@ func (p *Vdbe) Leave() {
   static const char *zFormat1 = "%4d %-13s %4d %4d %4d %-4s %.2X %s\n";
   if( pOut==0 ) pOut = stdout;
   zP4 = displayP4(pOp, zPtr, sizeof(zPtr));
-  fprintf(pOut, zFormat1, pc, 
+  fprintf(pOut, zFormat1, pc,
       sqlite3OpcodeName(pOp.opcode), pOp.p1, pOp.p2, pOp.p3, zP4, pOp.p5, "");
   fflush(pOut);
 }
@@ -731,7 +731,7 @@ func (p *Vdbe) List() (rc int) {
 			pMem.Type = SQLITE_INTEGER
 			pMem.Store(i)									//	Program counter
 			pMem++
-  
+
 			pMem.flags = MEM_Static | MEM_Str | MEM_Term
 			pMem.z = (char*)sqlite3OpcodeName(pOp.opcode)			//	Opcode
 			assert( pMem.z != 0 )
@@ -907,11 +907,11 @@ func (p *Vdbe) Rewind() {
 ** creating the virtual machine.  This involves things such
 ** as allocating stack space and initializing the program counter.
 ** After the VDBE has be prepped, it can be executed by one or more
-** calls to sqlite3VdbeExec().  
+** calls to sqlite3VdbeExec().
 **
 ** This function may be called exact once on a each virtual machine.
 ** After this routine is called the VM has been "packaged" and is ready
-** to run.  After this routine is called, futher calls to 
+** to run.  After this routine is called, futher calls to
 ** sqlite3VdbeAddOp() functions are prohibited.  This routine disconnects
 ** the Vdbe from the Parse object that helped generate it so that the
 ** the Vdbe becomes an independent entity and the Parse object can be
@@ -949,11 +949,11 @@ func (p *Vdbe) Rewind() {
   if nOnce == 0 {
 	  nOnce = 1			//	Ensure at least one byte in p.aOnceFlag[]
   }
-  
+
   /* For each cursor required, also allocate a memory cell. Memory
   ** cells (nMem+1-nCursor)..nMem, inclusive, will never be used by
   ** the vdbe program. Instead they are used to allocate space for
-  ** VdbeCursor/btree.Cursor structures. The blob of memory associated with 
+  ** VdbeCursor/btree.Cursor structures. The blob of memory associated with
   ** cursor 0 is stored in memory cell nMem. Memory cell (nMem-1)
   ** stores the blob of memory associated with cursor 1, etc.
   **
@@ -961,7 +961,7 @@ func (p *Vdbe) Rewind() {
   */
   nMem += nCursor;
 
-  /* Allocate space for memory registers, SQL variables, VDBE cursors and 
+  /* Allocate space for memory registers, SQL variables, VDBE cursors and
   ** an array to marshal SQL function arguments in.
   */
   zCsr = (byte*)(&p.Program[len(p.Program)])					//	Memory avaliable for allocation
@@ -978,10 +978,10 @@ func (p *Vdbe) Rewind() {
   p.expired = 0;
 
   /* Memory for registers, parameters, cursor, etc, is allocated in two
-  ** passes.  On the first pass, we try to reuse unused space at the 
+  ** passes.  On the first pass, we try to reuse unused space at the
   ** end of the opcode array.  If we are unable to satisfy all memory
   ** requirements by reusing the opcode array tail, then the second
-  ** pass will fill in the rest using a fresh allocation.  
+  ** pass will fill in the rest using a fresh allocation.
   **
   ** This two-pass approach that reuses as much memory as possible from
   ** the leftover space at the end of the opcode array can significantly
@@ -1044,7 +1044,7 @@ func (p *Vdbe) FreeCursor(pCx *VdbeCursor) {
 			pCx.Callbacks.xClose(pCx.pVtabCursor)
 			p.inVtabMethod = false
 	    }
-    	
+
   }
 }
 
@@ -1202,18 +1202,18 @@ func (db *sqlite3) vdbeCommit(p *Vdbe) (rc int) {
 				break
 			}
 			if database.pBt != nil {
-				rc = sqlite3BtreeCommitPhaseOne(pBt, 0)
+				rc = pBt.CommitPhaseOne("")
 			}
 		}
 
-		//	Do the commit only if all databases successfully complete phase 1. 
+		//	Do the commit only if all databases successfully complete phase 1.
 		//	If one of the BtreeCommitPhaseOne() calls fails, this indicates an IO error while deleting or truncating a journal file. It is unlikely, but could happen. In this case abandon processing and return the error.
 		for _, database := range db.Databases {
 			if rc != SQLITE_OK {
 				break
 			}
 			if database.pBt != nil {
-				rc = sqlite3BtreeCommitPhaseTwo(pBt, 0)
+				rc = pBt.CommitPhaseTwo(false)
 			}
 		}
 		if rc == SQLITE_OK {
@@ -1288,10 +1288,10 @@ func (db *sqlite3) vdbeCommit(p *Vdbe) (rc int) {
 		}
 
 		//	Sync all the db files involved in the transaction. The same call sets the master journal pointer in each individual journal. If an error occurs here, do not delete the master journal file.
-		//	If the error occurs during the first call to sqlite3BtreeCommitPhaseOne(), then there is a chance that the master journal file will be orphaned. But we cannot delete it, in case the master journal file name was written into the journal file before the failure occurred.
+		//	If the error occurs during the first call to Btree::CommitPhaseOne(), then there is a chance that the master journal file will be orphaned. But we cannot delete it, in case the master journal file name was written into the journal file before the failure occurred.
 		for _, database := range db.Databases {
 			if database.pBt {
-				if rc = sqlite3BtreeCommitPhaseOne(database.pBt, zMaster); rc != SQLITE_OK {
+				if rc = database.pBt.CommitPhaseOne(zMaster); rc != SQLITE_OK {
 					break
 				}
 			}
@@ -1308,11 +1308,11 @@ func (db *sqlite3) vdbeCommit(p *Vdbe) (rc int) {
 			return rc
 		}
 
-		//	All files and directories have already been synced, so the following calls to sqlite3BtreeCommitPhaseTwo() are only closing files and deleting or truncating journals. If something goes wrong while this is happening we don't really care. The integrity of the transaction is already guaranteed, but some stray 'cold' journals may be lying around. Returning an error code won't help matters.
+		//	All files and directories have already been synced, so the following calls to Btree::CommitPhaseTwo() are only closing files and deleting or truncating journals. If something goes wrong while this is happening we don't really care. The integrity of the transaction is already guaranteed, but some stray 'cold' journals may be lying around. Returning an error code won't help matters.
 		disable_simulated_io_errors()
 		for _, database := range db.Databases {
 			if database.pBt != nil {
-				sqlite3BtreeCommitPhaseTwo(database.pBt, 1)
+				database.pBt.CommitPhaseTwo(true)
 			}
 		}
 		enable_simulated_io_errors()
@@ -1387,7 +1387,7 @@ func (p *Vdbe) CheckFk(deferred bool) (rc int) {
 func (p *Vdbe) Halt() (rc int) {
 	db := p.db
 
-	//	This function contains the logic that determines if a statement or transaction will be committed or rolled back as a result of the execution of this virtual machine. 
+	//	This function contains the logic that determines if a statement or transaction will be committed or rolled back as a result of the execution of this virtual machine.
 	//	If any of the following errors occur:
 	//			SQLITE_NOMEM
 	//			SQLITE_IOERR
@@ -1434,8 +1434,8 @@ func (p *Vdbe) Halt() (rc int) {
 		if p.rc == SQLITE_OK {
 			p.CheckFk(0)
 		}
-  
-		//	If the auto-commit flag is set and this is the only active writer VM, then we do either a commit or rollback of the current transaction. 
+
+		//	If the auto-commit flag is set and this is the only active writer VM, then we do either a commit or rollback of the current transaction.
 		//	Note: This block also runs if one of the special errors handled above has occurred.
 		if !(db.nVTrans > 0 && db.aVTrans == 0) && db.autoCommit && db.writeVdbeCnt == (p.readOnly == 0) {
 			if p.rc == SQLITE_OK || (p.errorAction == OE_Fail && !isSpecialError) {
@@ -1476,7 +1476,7 @@ func (p *Vdbe) Halt() (rc int) {
 				db.autoCommit = 1
 			}
 		}
-  
+
 		//	If eStatementOp is non-zero, then a statement transaction needs to be committed or rolled back. Call Vdbe::CloseStatement() to do so. If this operation returns an error, and the current statement error code is SQLITE_OK or SQLITE_CONSTRAINT, then promote the current statement error code.
 		if eStatementOp {
 			if rc = p.CloseStatement(eStatementOp); rc != SQLITE_OK {
@@ -1490,7 +1490,7 @@ func (p *Vdbe) Halt() (rc int) {
 			}
 		}
 
-		//	If this was an INSERT, UPDATE or DELETE and no statement transaction has been rolled back, update the database connection change-counter. 
+		//	If this was an INSERT, UPDATE or DELETE and no statement transaction has been rolled back, update the database connection change-counter.
 		if p.changeCntOn {
 			if eStatementOp != SAVEPOINT_ROLLBACK {
 				db.VdbeSetChanges(p.nChange)
@@ -1537,7 +1537,7 @@ func (p *Vdbe) ResetStepResult() {
 
 /*
 ** Copy the error code and error message belonging to the VDBE passed
-** as the first argument to its database handle (so that they will be 
+** as the first argument to its database handle (so that they will be
 ** returned by calls to sqlite3_errcode() and sqlite3_errmsg()).
 **
 ** This function does not clear the VDBE error code or message, just
@@ -1606,7 +1606,7 @@ func (p *Vdbe) Reset() int {
 	p.magic = VDBE_MAGIC_INIT
 	return p.rc & db.errMask
 }
- 
+
 //	Clean up and delete a VDBE after execution. Return an integer which is the result code.
 func (p *Vdbe) Finalize() (rc int) {
 	if p.magic == VDBE_MAGIC_RUN || p.magic == VDBE_MAGIC_HALT {
@@ -1910,7 +1910,7 @@ UnpackedRecord *sqlite3VdbeAllocUnpackedRecord(
   int nByte;                      /* Number of bytes required for *p */
 
   /* We want to shift the pointer pSpace up such that it is 8-byte aligned.
-  ** Thus, we need to calculate a value, nOff, between 0 and 7, to shift 
+  ** Thus, we need to calculate a value, nOff, between 0 and 7, to shift
   ** it by.  If pSpace is already 8-byte aligned, nOff should be zero.
   */
   nOff = (8 - (SQLITE_PTR_TO_INT(pSpace) & 7)) & 7;
@@ -2018,7 +2018,7 @@ int sqlite3VdbeIdxRowid(sqlite3 *db, btree.Cursor *pCur, int64 *rowid) {
 **
 ** pUnpacked is either created without a rowid or is truncated so that it
 ** omits the rowid at the end.  The rowid at the end of the index entry
-** is ignored as well.  Hence, this routine only compares the prefixes 
+** is ignored as well.  Hence, this routine only compares the prefixes
 ** of the keys prior to the final rowid, not the entire key.
 */
 int sqlite3VdbeIdxKeyCompare(
@@ -2048,7 +2048,7 @@ int sqlite3VdbeIdxKeyCompare(
 	return rc
 }
 
-//	This routine sets the value to be returned by subsequent calls to sqlite3_changes() on the database handle 'db'. 
+//	This routine sets the value to be returned by subsequent calls to sqlite3_changes() on the database handle 'db'.
 func (db *sqlite3) VdbeSetChanges(nChange int) {
 	db.nChange = nChange
 	db.nTotalChange += nChange
@@ -2077,7 +2077,7 @@ func (v *Vdbe) DB() *sqlite3 {
 
 /*
 ** Return a pointer to an sqlite3_value structure containing the value bound
-** parameter iVar of VM v. Except, if the value is an SQL NULL, return 
+** parameter iVar of VM v. Except, if the value is an SQL NULL, return
 ** 0 instead. Unless it is NULL, apply affinity aff (one of the SQLITE_AFF_*
 ** constants) to the value before returning it.
 **

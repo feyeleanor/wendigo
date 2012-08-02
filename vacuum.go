@@ -104,7 +104,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
   pTemp = db.Databases[len(db.Databases) - 1].pBt
 
   //	The call to ExecSql() to attach the temp database has left the file locked (as there was more than one active statement when the transaction to read the schema was concluded. Unlock it here so that this doesn't cause problems for the call to BtreeSetPageSize() below.
-  sqlite3BtreeCommit(pTemp);
+  pTemp.Commit()
 
   nRes = sqlite3BtreeGetReserve(pMain);
 
@@ -175,7 +175,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
 	  goto end_of_vacuum
   }
 
-  //	At this point, there is a write transaction open on both the vacuum database and the main database. Assuming no error occurs, both transactions are closed by this block - the main database transaction by sqlite3BtreeCopyFile() and the other by an explicit call to sqlite3BtreeCommit().
+  //	At this point, there is a write transaction open on both the vacuum database and the main database. Assuming no error occurs, both transactions are closed by this block - the main database transaction by sqlite3BtreeCopyFile() and the other by an explicit call to Btree::Commit().
   {
     uint32 meta;
     int i;
@@ -209,7 +209,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
 	if rc = sqlite3BtreeCopyFile(pMain, pTemp); rc != SQLITE_OK {
 		goto end_of_vacuum
 	}
-    if rc = sqlite3BtreeCommit(pTemp); rc != SQLITE_OK {
+    if rc = pTemp.Commit(); rc != SQLITE_OK {
 		goto end_of_vacuum
 	}
     sqlite3BtreeSetAutoVacuum(pMain, sqlite3BtreeGetAutoVacuum(pTemp));
