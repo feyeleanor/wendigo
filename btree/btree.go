@@ -5401,25 +5401,19 @@ func (p *Btree) Pager() *Pager {
 	return p.pBt.pPager
 }
 
-/*
-** Append a message to the error message string.
-*/
-static void checkAppendMsg(
-  IntegrityCheck *pCheck,
-  char *zMsg1,
-  const char *zFormat,
-  ap... string
-){
-  if( !pCheck.mxErr ) return;
-  pCheck.mxErr--;
-  pCheck.nErr++;
-  if( pCheck.errMsg.nChar ){
-    pCheck.errMsg = append(pCheck.errMsg, "\n")
-  }
-  if( zMsg1 ){
-    pCheck.errMsg = append(pCheck.errMsg, zMsg1)
-  }
-  pCheck.errMsg = fmt.Sprintf(zFormat, ap);
+//	Append a message to the error message string.
+func (p *IntegrityCheck) AppendMsg(message string, format string, ap... string) {
+	if p.mxErr {
+		p.mxErr--
+		p.nErr++;
+		if p.errMsg.nChar {
+			p.errMsg = append(p.errMsg, "\n")
+		}
+		if message != "" {
+			p.errMsg = append(p.errMsg, message)
+		}
+		p.errMsg = fmt.Sprintf(format, ap)
+	}
 }
 
 /*
@@ -5440,136 +5434,94 @@ static void setPageReferenced(IntegrityCheck *pCheck, PageNumber iPg){
 }
 
 
-/*
-** Add 1 to the reference count for page iPage.  If this is the second
-** reference to the page, add an error message to pCheck.zErrMsg.
-** Return 1 if there are 2 ore more references to the page and 0 if
-** if this is the first reference to the page.
-**
-** Also check that the page number is in bounds.
-*/
-static int checkRef(IntegrityCheck *pCheck, PageNumber iPage, char *zContext){
-  if( iPage==0 ) return 1;
-  if( iPage>pCheck.nPage ){
-    checkAppendMsg(pCheck, zContext, "invalid page number %d", iPage);
-    return 1;
-  }
-  if( getPageReferenced(pCheck, iPage) ){
-    checkAppendMsg(pCheck, zContext, "2nd reference to page %d", iPage);
-    return 1;
-  }
-  setPageReferenced(pCheck, iPage);
-  return 0;
+//	Add 1 to the reference count for page iPage. If this is the second reference to the page, add an error message to pCheck.zErrMsg. Return 1 if there are 2 or more references to the page and 0 if this is the first reference to the page.
+//	Also check that the page number is in bounds.
+func (p *IntegrityCheck) checkRef(page PageNumber, context string) (ok bool) {
+	if page != 0 {
+		switch {
+		case page > p.nPage:
+			p.AppendMsg(context, "invalid page number %d", page)
+			ok = true
+		case getPageReferenced(p, page):
+			p.AppendMsg(context, "2nd reference to page %d", page)
+			ok = true
+		default:
+			setPageReferenced(p, page)
+		}
+	}
+	return
 }
 
-/*
-** Check that the entry in the pointer-map for page iChild maps to
-** page iParent, pointer type ptrType. If not, append an error message
-** to pCheck.
-*/
-static void checkPtrmap(
-  IntegrityCheck *pCheck,   /* Integrity check context */
-  PageNumber iChild,           /* Child page number */
-  byte eType,              /* Expected pointer map type */
-  PageNumber iParent,          /* Expected pointer map parent page number */
-  char *zContext         /* Context description (used for error msg) */
-){
-	int rc;
-	byte ePtrmapType;
-	PageNumber iPtrmapParent;
-
-	if ePtrmapType, iPtrmapParent, rc = pCheck.pBt.Get(iChild); rc != SQLITE_OK {
-		checkAppendMsg(pCheck, zContext, "Failed to read ptrmap key=%d", iChild)
-		return
-	}
-
-	if ePtrmapType != eType || iPtrmapParent != iParent {
-		checkAppendMsg(pCheck, zContext, "Bad ptr map entry key=%d expected=(%d,%d) got=(%d,%d)", iChild, eType, iParent, ePtrmapType, iPtrmapParent)
+//	Check that the entry in the pointer-map for page child maps to page parent, pointer type eType. If not, append an error message to pCheck.
+func (p *IntegrityCheck) checkPtrmap(child PageNumber, eType byte, parent PageNumber, errorContext string) {
+	if mapType, mapParent, rc := pCheck.pBt.Get(child); rc == SQLITE_OK {
+		if mapType != eType || mapParent != parent {
+			pCheck.AppendMsg(errorContext, "Bad ptr map entry key=%d expected=(%d,%d) got=(%d,%d)", child, eType, parent, mapType, mapParent)
+		}
+	} else {
+		pCheck.AppendMsg(errorContext, "Failed to read ptrmap key=%d", child)
 	}
 }
 
-/*
-** Check the integrity of the freelist or of an overflow page list.
-** Verify that the number of pages on the list is N.
-*/
-static void checkList(
-  IntegrityCheck *pCheck,  /* Integrity checking context */
-  int isFreeList,       /* True for a freelist.  False for overflow page list */
-  int iPage,            /* Page number for first page in the list */
-  int N,                /* Expected number of pages in the list */
-  char *zContext        /* Context for error messages */
-){
-  int i;
-  int expected = N;
-  int iFirst = iPage;
-  while( N-- > 0 && pCheck.mxErr ){
-    DbPage *pOvflPage;
-    unsigned char *pOvflData;
-    if( iPage<1 ){
-      checkAppendMsg(pCheck, zContext,
-         "%d of %d pages missing from overflow list starting at %d",
-          N+1, expected, iFirst);
-      break;
-    }
-    if( checkRef(pCheck, iPage, zContext) ) break;
-    if rc, pOvflPage = pCheck.pPager.Acquire(PageNumber(iPage), false); rc != SQLITE_OK {
-      checkAppendMsg(pCheck, zContext, "failed to get page %d", iPage);
-      break;
-    }
-    pOvflData = pOvflPage.GetData()
-    if( isFreeList ){
-      int n = Buffer(pOvflData[4:]).ReadUint32()
-      if( pCheck.pBt.autoVacuum ){
-        checkPtrmap(pCheck, iPage, FREE_PAGE, 0, zContext);
-      }
-      if( n>(int)pCheck.pBt.usableSize/4-2 ){
-        checkAppendMsg(pCheck, zContext,
-           "freelist leaf count too big on page %d", iPage);
-        N--;
-      }else{
-        for(i=0; i<n; i++){
-          PageNumber iFreePage = Buffer(pOvflData[8 + (i * 4):]).ReadUint32()
-          if( pCheck.pBt.autoVacuum ){
-            checkPtrmap(pCheck, iFreePage, FREE_PAGE, 0, zContext);
-          }
-          checkRef(pCheck, iFreePage, zContext);
-        }
-        N -= n;
-      }
-    }
-    else{
-      /* If this database supports auto-vacuum and iPage is not the last
-      ** page in this overflow list, check that the pointer-map entry for
-      ** the following page matches iPage.
-      */
-      if( pCheck.pBt.autoVacuum && N>0 ){
-        i = Buffer(pOvflData).ReadUint32()
-        checkPtrmap(pCheck, i, SECONDARY_OVERFLOW_PAGE, iPage, zContext);
-      }
-    }
-    iPage = Buffer(pOvflData).ReadUint32()
-    sqlite3PagerUnref(pOvflPage);
-  }
+//	Check the integrity of the freelist or of an overflow page list. Verify that the number of pages on the list is N.
+func (p *IntegrityCheck) checkList(isFreeList bool, page, N int, errorContext string) {
+	expected := N
+	firstPage := page
+	for N--; N > 0 && pCheck.mxErr; N-- {
+		switch {
+		case page < 1:
+			p.AppendMsg(errorContext, "%d of %d pages missing from overflow list starting at %d", N + 1, expected, firstPage)
+			break
+		case p.checkRef(page, errorContext):
+			break
+		}
+		if rc, overflowPage := p.pPager.Acquire(PageNumber(page), false); rc == SQLITE_OK {
+			overflowData := overflowPage.GetData()
+			if isFreeList {
+				n := overflowData[4:].ReadUint32()
+				switch {
+				case p.pBt.autoVacuum:
+					checkPtrmap(p, iPage, FREE_PAGE, 0, errorContext)
+				case n > int(p.pBt.usableSize / 4 - 2):
+					p.AppendMsg(errorContext, "freelist leaf count too big on page %d", page)
+					N--
+				default:
+					for i := 0; i < n; i++ {
+						freePage := pOvflData[8 + (i * 4):].ReadUint32()
+						if p.pBt.autoVacuum {
+							checkPtrmap(p, freePage, FREE_PAGE, 0, errorContext)
+						}
+						p.checkRef(freePage, errorContext)
+					}
+					N -= n
+				}
+			} else {
+				//	If this database supports auto-vacuum and iPage is not the last page in this overflow list, check that the pointer-map entry for the following page matches iPage.
+				if p.pBt.autoVacuum && N > 0 {
+					i = overflowData.ReadUint32()
+					checkPtrmap(p, i, SECONDARY_OVERFLOW_PAGE, page, errorContext)
+				}
+			}
+			page = overflowData.ReadUint32()
+			sqlite3PagerUnref(overflowPage)
+		} else {
+			p.AppendMsg(errorContext, "failed to get page %d", page)
+			break
+		}
+	}
 }
 
-/*
-** Do various sanity checks on a single page of a tree.  Return
-** the tree depth.  Root pages return 0.  Parents of root pages
-** return 1, and so forth.
-**
-** These checks are done:
-**
-**      1.  Make sure that cells and freeblocks do not overlap
-**          but combine to completely cover the page.
-**  NO  2.  Make sure cell keys are in order.
-**  NO  3.  Make sure no key is less than or equal to zLowerBound.
-**  NO  4.  Make sure no key is greater than or equal to zUpperBound.
-**      5.  Check the integrity of overflow pages.
-**      6.  Recursively call checkTreePage on all children.
-**      7.  Verify that the depth of all children is the same.
-**      8.  Make sure this page is at least 33% full or else it is
-**          the root of the tree.
-*/
+//	Do various sanity checks on a single page of a tree. Return the tree depth. Root pages return 0. Parents of root pages return 1, and so forth.
+//	These checks are done:
+//		1.  Make sure that cells and freeblocks do not overlap but combine to completely cover the page.
+//	NO	2.  Make sure cell keys are in order.
+//	NO	3.  Make sure no key is less than or equal to zLowerBound.
+//	NO	4.  Make sure no key is greater than or equal to zUpperBound.
+//		5.  Check the integrity of overflow pages.
+//		6.  Recursively call checkTreePage on all children.
+//		7.  Verify that the depth of all children is the same.
+//		8.  Make sure this page is at least 33% full or else it is the root of the tree.
+func (p *IntegrityCheck) checkTreePage(iPage int, zParentContext string, pnParentMinKey, pnParentMaxKey int64) int {
 static int checkTreePage(
   IntegrityCheck *pCheck,  /* Context for the sanity check */
   int iPage,            /* Page number of the page to check */
@@ -5577,164 +5529,172 @@ static int checkTreePage(
   int64 *pnParentMinKey,
   int64 *pnParentMaxKey
 ){
-  MemoryPage *pPage;
-  int i, rc, depth, d2, pgno, cnt;
-  int hdr, cellStart;
-  int nCell;
-  byte *data;
-  BtShared *pBt;
-  int usableSize;
-  char *hit = 0;
-  int64 nMinKey = 0;
-  int64 nMaxKey = 0;
+	MemoryPage *pPage
+	int i, rc, depth, d2, pgno, cnt
+	int hdr, cellStart
+	int nCell
+	byte *data
+	BtShared *pBt
+	int usableSize
+	char *hit = 0
+	int64 nMinKey = 0
+	int64 nMaxKey = 0
 
-  zContext := fmt.Sprintf("Page %v: ", iPage);
+	zContext := fmt.Sprintf("Page %v: ", iPage)
 
-  //	Check that the page exists
-  pBt = pCheck.pBt;
-  usableSize = pBt.usableSize;
-  if( iPage==0 ) return 0;
-  if( checkRef(pCheck, iPage, zParentContext) ) return 0;
-  if pPage, rc = pBt.GetPage(PageNumber(iPage), false); rc != 0 {
-    checkAppendMsg(pCheck, zContext, "unable to get the page. error code=%d", rc)
-    return 0
-  }
+	//	Check that the page exists
+	pBt = pCheck.pBt
+	usableSize = pBt.usableSize
+	if iPage == 0 || pCheck.checkRef(iPage, zParentContext) {
+		return 0
+	}
+	if pPage, rc = pBt.GetPage(PageNumber(iPage), false); rc != 0 {
+		check.AppendMsg(zContext, "unable to get the page. error code=%d", rc)
+		return 0
+	}
 
 	//	Clear MemoryPage.isInit to make sure the corruption detection code in MemoryPage::Initialize() is executed.
-  pPage.isInit = false
-  if( (rc = pPage.Initialize()) != 0 ){
-    assert( rc==SQLITE_CORRUPT );  /* The only possible error from InitPage */
-    checkAppendMsg(pCheck, zContext, "Initialize() returns error code %d", rc);
-    pPage.Release()
-    return 0;
-  }
+	pPage.isInit = false
+	if rc = pPage.Initialize(); rc != 0 {
+		assert( rc == SQLITE_CORRUPT )			//	The only possible error from InitPage
+		check.AppendMsg(zContext, "Initialize() returns error code %d", rc)
+		pPage.Release()
+		return 0
+	}
 
-  //	Check out all the cells.
-  depth = 0;
-  for(i=0; i<pPage.nCell && pCheck.mxErr; i++){
-    pCell		*byte
-    sz			uint32
-    info		CellInfo
+	//	Check out all the cells.
+	depth = 0
+	for i := 0; i < pPage.nCell && pCheck.mxErr; i++ {
+		pCell		*byte
+		sz			uint32
+		info		CellInfo
 
-    //	Check payload overflow pages
-	zContext = fmt.Sprintf("On tree page %v cell %v: ", iPage, i);
-    pCell = pPage.FindCell(i)
-    info.ParsePtr(pPage, pCell)
-    sz = info.nData;
-    if( !pPage.intKey ) sz += (int)info.nKey;
-    //	For intKey pages, check that the keys are in order.
-    else if( i==0 ) nMinKey = nMaxKey = info.nKey;
-    else{
-      if( info.nKey <= nMaxKey ){
-        checkAppendMsg(pCheck, zContext, "Rowid %lld out of order (previous was %lld)", info.nKey, nMaxKey);
-      }
-      nMaxKey = info.nKey;
-    }
-    assert( sz==info.nPayload );
-    if (sz>info.nLocal) && (&pCell[info.iOverflow]<=&pPage.aData[pBt.usableSize]) {
-      int nPage = (sz - info.nLocal + usableSize - 5)/(usableSize - 4);
-      PageNumber pgnoOvfl = Buffer(pCell[info.iOverflow:]).ReadUint32()
-      if( pBt.autoVacuum ){
-        checkPtrmap(pCheck, pgnoOvfl, FIRST_OVERFLOW_PAGE, iPage, zContext);
-      }
-      checkList(pCheck, 0, pgnoOvfl, nPage, zContext);
-    }
+		//	Check payload overflow pages
+		zContext = fmt.Sprintf("On tree page %v cell %v: ", iPage, i)
+		pCell = pPage.FindCell(i)
+		info.ParsePtr(pPage, pCell)
+		sz = info.nData;
+		if !pPage.intKey {
+			sz += (int)info.nKey
+		}
+		//	For intKey pages, check that the keys are in order.
+		else if i == 0 {
+			nMinKey = nMaxKey = info.nKey
+		} else {
+			if info.nKey <= nMaxKey {
+				check.AppendMsg(zContext, "Rowid %lld out of order (previous was %lld)", info.nKey, nMaxKey)
+			}
+			nMaxKey = info.nKey
+		}
+		assert( sz == info.nPayload )
+		if (sz > info.nLocal) && (pCell[info.iOverflow] <= pPage.aData[pBt.usableSize]) {
+			nPage := (sz - info.nLocal + usableSize - 5)/(usableSize - 4)
+			pgnoOvfl := Buffer(pCell[info.iOverflow:]).ReadUint32()
+			if pBt.autoVacuum {
+				checkPtrmap(pCheck, pgnoOvfl, FIRST_OVERFLOW_PAGE, iPage, zContext)
+			}
+			pCheck.checkList(0, pgnoOvfl, nPage, zContext)
+		}
 
-    //	Check sanity of left child page.
-    if( !pPage.leaf ){
-      pgno = Buffer(pCell).ReadUint32()
-      if( pBt.autoVacuum ){
-        checkPtrmap(pCheck, pgno, NON_ROOT_BTREE_PAGE, iPage, zContext);
-      }
-      d2 = checkTreePage(pCheck, pgno, zContext, &nMinKey, i==0 ? NULL : &nMaxKey);
-      if( i>0 && d2!=depth ){
-        checkAppendMsg(pCheck, zContext, "Child page depth differs");
-      }
-      depth = d2;
-    }
-  }
+		//	Check sanity of left child page.
+		if !pPage.leaf {
+			pgno = Buffer(pCell).ReadUint32()
+			if pBt.autoVacuum {
+				checkPtrmap(pCheck, pgno, NON_ROOT_BTREE_PAGE, iPage, zContext)
+			}
+			d2 = checkTreePage(pCheck, pgno, zContext, &nMinKey, i==0 ? NULL : &nMaxKey)
+			if i > 0 && d2 != depth {
+				check.AppendMsg(zContext, "Child page depth differs")
+			}
+			depth = d2;
+		}
+	}
 
-  if( !pPage.leaf ){
-    pgno = Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
-    Context = fmt.Sprintf("On page %v at right child: ", iPage);
-    if( pBt.autoVacuum ){
-      checkPtrmap(pCheck, pgno, NON_ROOT_BTREE_PAGE, iPage, zContext);
-    }
-    checkTreePage(pCheck, pgno, zContext, NULL, !pPage.nCell ? NULL : &nMaxKey);
-  }
+	if !pPage.leaf {
+		pgno = Buffer(pPage.aData[pPage.hdrOffset + 8:]).ReadUint32()
+		Context = fmt.Sprintf("On page %v at right child: ", iPage)
+		if pBt.autoVacuum {
+			checkPtrmap(pCheck, pgno, NON_ROOT_BTREE_PAGE, iPage, zContext)
+		}
+		checkTreePage(pCheck, pgno, zContext, NULL, !pPage.nCell ? NULL : &nMaxKey)
+	}
 
-  //	For intKey leaf pages, check that the min/max keys are in order with any left/parent/right pages.
-  if pPage.leaf && pPage.intKey {		//	if we are a left child page
-    if pnParentMinKey {					//	if we are the left most child page
-      if !pnParentMaxKey {
-        if nMaxKey > *pnParentMinKey {
-          checkAppendMsg(pCheck, zContext, "Rowid %lld out of order (max larger than parent min of %lld)", nMaxKey, *pnParentMinKey)
-        }
-      }else{
-        if nMinKey <= *pnParentMinKey {
-          checkAppendMsg(pCheck, zContext, "Rowid %lld out of order (min less than parent min of %lld)", nMinKey, *pnParentMinKey)
-        }
-        if nMaxKey > *pnParentMaxKey {
-          checkAppendMsg(pCheck, zContext, "Rowid %lld out of order (max larger than parent max of %lld)", nMaxKey, *pnParentMaxKey)
-        }
-        *pnParentMinKey = nMaxKey;
-      }
-    } else if pnParentMaxKey {			//	 else if we're a right child page
-      if nMinKey <= *pnParentMaxKey {
-        checkAppendMsg(pCheck, zContext, "Rowid %lld out of order (min less than parent max of %lld)", nMinKey, *pnParentMaxKey)
-      }
-    }
-  }
+	//	For intKey leaf pages, check that the min/max keys are in order with any left/parent/right pages.
+	if pPage.leaf && pPage.intKey {		//	if we are a left child page
+		if pnParentMinKey {					//	if we are the left most child page
+			if !pnParentMaxKey {
+				if nMaxKey > *pnParentMinKey {
+					check.AppendMsg(zContext, "Rowid %lld out of order (max larger than parent min of %lld)", nMaxKey, *pnParentMinKey)
+				}
+			} else {
+				if nMinKey <= *pnParentMinKey {
+					check.AppendMsg(zContext, "Rowid %lld out of order (min less than parent min of %lld)", nMinKey, *pnParentMinKey)
+				}
+				if nMaxKey > *pnParentMaxKey {
+					check.AppendMsg(zContext, "Rowid %lld out of order (max larger than parent max of %lld)", nMaxKey, *pnParentMaxKey)
+				}
+				*pnParentMinKey = nMaxKey;
+			}
+		} else if pnParentMaxKey {			//	 else if we're a right child page
+			if nMinKey <= *pnParentMaxKey {
+				check.AppendMsg(zContext, "Rowid %lld out of order (min less than parent max of %lld)", nMinKey, *pnParentMaxKey)
+			}
+		}
+	}
 
-  //	Check for complete coverage of the page
-  data := Buffer(pPage.aData)
-  hdr = pPage.hdrOffset;
-  hit = sqlite3PageMalloc( pBt.pageSize );
-    contentOffset := data[hdr + 5].ReadCompressedIntNotZero()
-    assert( contentOffset<=usableSize );
-    memset(hit+contentOffset, 0, usableSize-contentOffset);
-    memset(hit, 1, contentOffset);
-    nCell = data[hdr + 3].ReadUint16()
-    cellStart = hdr + 12 - 4*pPage.leaf;
-    for(i=0; i<nCell; i++){
-      pc := int(data[cellStart + (i * 2)].ReadUint16())
-      uint32 size = 65536;
-      int j;
-      if( pc<=usableSize-4 ){
-        size = pPage.cellSize(&data[pc])
-      }
-      if( (int)(pc+size-1)>=usableSize ){
-        checkAppendMsg(pCheck, 0, "Corruption detected in cell %d on page %d",i,iPage)
-      }else{
-        for(j=pc+size-1; j>=pc; j--) hit[j]++;
-      }
-    }
-    i = data[hdr + 1].ReadUint16()
-    while( i>0 ){
-      int size, j;
-      assert( i<=usableSize-4 );
-      size = data[i + 2].ReadUint16()
-      assert( i+size<=usableSize );
-      for(j=i+size-1; j>=i; j--) hit[j]++;
-      j = data[i].ReadUint16()
-      assert( j==0 || j>i+size );
-      assert( j<=usableSize-4 );
-      i = j;
-    }
-    for(i=cnt=0; i<usableSize; i++){
-      if( hit[i]==0 ){
-        cnt++;
-      }else if( hit[i]>1 ){
-        checkAppendMsg(pCheck, 0, "Multiple uses for byte %d of page %d", i, iPage);
-        break;
-      }
-    }
-    if( cnt!=data[hdr+7] ){
-      checkAppendMsg(pCheck, 0, "Fragmentation of %d bytes reported as %d on page %d", cnt, data[hdr+7], iPage);
-    }
-  sqlite3PageFree(hit);
-  pPage.Release()
-  return depth+1;
+	//	Check for complete coverage of the page
+	data := Buffer(pPage.aData)
+	hdr = pPage.hdrOffset
+	hit = sqlite3PageMalloc( pBt.pageSize )
+	contentOffset := data[hdr + 5].ReadCompressedIntNotZero()
+	assert( contentOffset<=usableSize )
+	memset(hit+contentOffset, 0, usableSize - contentOffset)
+	memset(hit, 1, contentOffset)
+	nCell = data[hdr + 3].ReadUint16()
+	cellStart = hdr + 12 - 4*pPage.leaf
+	for i := 0; i < nCell; i++ {
+		pc := int(data[cellStart + (i * 2)].ReadUint16())
+		uint32 size = 65536
+		int j
+		if pc <= usableSize - 4 {
+			size = pPage.cellSize(&data[pc])
+		}
+		if int(pc+size-1) >= usableSize {
+			check.AppendMsg("", "Corruption detected in cell %d on page %d", i, iPage)
+		}else{
+			for j := pc + size - 1; j >= pc; j-- {
+				hit[j]++
+			}
+		}
+	}
+	i = data[hdr + 1].ReadUint16()
+	for i > 0 {
+		int size, j
+		assert( i <= usableSize-4 )
+		size = data[i + 2].ReadUint16()
+		assert( i + size <= usableSize )
+		for j := i + size - 1; j >= i; j-- {
+			hit[j]++;
+		}
+		j = data[i].ReadUint16()
+		assert( j == 0 || j > i + size )
+		assert( j <= usableSize - 4 )
+		i = j
+	}
+	for i, cnt := 0, 0; i < usableSize; i++ {
+		if hit[i] == 0 {
+			cnt++
+		} else if hit[i] > 1 {
+			check.AppendMsg("", "Multiple uses for byte %d of page %d", i, iPage)
+			break
+		}
+	}
+	if cnt != data[hdr + 7] {
+		check.AppendMsg("", "Fragmentation of %d bytes reported as %d on page %d", cnt, data[hdr + 7], iPage)
+	}
+	sqlite3PageFree(hit)
+	pPage.Release()
+	return depth + 1
 }
 
 /*
@@ -5783,7 +5743,7 @@ func sqlite3BtreeIntegrityCheck(p *Btree, aRoot *int,		//	An array of root pages
 	check.errMsg.useMalloc = 2;
 
 	//	Check the integrity of the freelist
-	checkList(check, 1, Buffer(btree.pPage1.aData[32:]).ReadUint32(), Buffer(btree.pPage1.aData[36:]).ReadUint32(), "Main freelist: ")
+	check.checkList(1, Buffer(btree.pPage1.aData[32:]).ReadUint32(), Buffer(btree.pPage1.aData[36:]).ReadUint32(), "Main freelist: ")
 
 	//	Check all the tables.
 	for i := 0; i < nRoot && check.maxErr; i++ {
@@ -5800,16 +5760,16 @@ func sqlite3BtreeIntegrityCheck(p *Btree, aRoot *int,		//	An array of root pages
 	for i := 1; i <= check.PageNumber && check.maxErr; i++ {
 		//	If the database supports auto-vacuum, make sure no tables contain references to pointer-map pages.
 		if getPageReferenced(check, i) == 0 && (btree.Pageno(i) != i || !btree.autoVacuum) {
-			checkAppendMsg(check, 0, "Page %d is never used", i)
+			check.AppendMsg("", "Page %d is never used", i)
 		}
 		if getPageReferenced(check, i) != 0 && (btree.Pageno(i) == i && btree.autoVacuum) {
-			checkAppendMsg(check, 0, "Pointer map page %d is referenced", i)
+			check.AppendMsg("", "Pointer map page %d is referenced", i)
 		}
 	}
 
 	//	Make sure this analysis did not leave any unref() pages. This is an internal consistency check; an integrity check of the integrity check.
 	if nRef != sqlite3PagerRefcount(pBt.pPager) {
-		checkAppendMsg(check, 0, "Outstanding page count goes from %d to %d during this analysis", nRef, sqlite3PagerRefcount(btree.pPager))
+		check.AppendMsg("", "Outstanding page count goes from %d to %d during this analysis", nRef, sqlite3PagerRefcount(btree.pPager))
 	}
 
 	//	Clean  up and report errors.
