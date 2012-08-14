@@ -1,13 +1,6 @@
-/* This file contains code used to help implement virtual tables.
-*/
+//	This file contains code used to help implement virtual tables.
 
-/*
-** Before a virtual table xCreate() or xConnect() method is invoked, the
-** sqlite3.pVtabCtx member variable is set to point to an instance of
-** this struct allocated on the stack. It is used by the implementation of 
-** the sqlite3_declare_vtab() and vtab_config() APIs, both of which
-** are invoked only from within xCreate and xConnect methods.
-*/
+//	Before a virtual table xCreate() or xConnect() method is invoked, the sqlite3.pVtabCtx member variable is set to point to an instance of this struct allocated on the stack. It is used by the implementation of the DeclareVTab(() and vtab_config() APIs, both of which are invoked only from within xCreate and xConnect methods.
 type VtabCtx struct {
 	*Table
 	*VTable
@@ -48,7 +41,7 @@ func (db *sqlite3) create_module_v2(Name string, pModule *sqlite3_module, pAux i
 	return db.createModule(Name, pModule, pAux, xDestroy)
 }
 
-//	Lock the virtual table so that it cannot be disconnected. Locks nest. Every lock should have a corresponding unlock. If an unlock is omitted, resources leaks will occur.  
+//	Lock the virtual table so that it cannot be disconnected. Locks nest. Every lock should have a corresponding unlock. If an unlock is omitted, resources leaks will occur.
 //	If a disconnect is attempted while a virtual table is locked, the disconnect is deferred until all locks have been removed.
 func (p *VTable) Lock() {
 	p.nRef++
@@ -200,7 +193,7 @@ func (pParse *Parse) VtabFinishParse(pEnd string) {
 				}
 				statement := fmt.Sprintf("CREATE VIRTUAL TABLE %v", pParse.sNameToken)
 
-				//	A slot for the record has already been allocated in the SQLITE_MASTER table. We just need to update that slot with all the information we've collected.  
+				//	A slot for the record has already been allocated in the SQLITE_MASTER table. We just need to update that slot with all the information we've collected.
 				//	The VM register number pParse.regRowid holds the rowid of an entry in the sqlite_master table tht was created for this vtab by sqlite3StartTable().
 				iDb := db.SchemaToIndex(pTab.Schema)
 				sqlite3NestedParse(pParse, "UPDATE %Q.%s SET type='table', name=%Q, tbl_name=%Q, rootpage=0, sql=%Q WHERE rowid=#%d", db.Databases[iDb].Name, SCHEMA_TABLE(iDb), pTab.Name, pTab.Name, statement, pParse.regRowid)
@@ -251,7 +244,7 @@ func (pParse *Parse) VtabFinishParse(pEnd string) {
 ** to this procedure.
 */
 static int vtabCallConstructor(
-  sqlite3 *db, 
+  sqlite3 *db,
   Table *pTab,
   Module *pMod,
   int (*xConstruct)(sqlite3*,void*,int,const char*const*,sqlite3_vtab**,char**),
@@ -346,7 +339,7 @@ static int vtabCallConstructor(
 
 /*
 ** This function is invoked by the parser to call the xConnect() method
-** of the virtual table pTab. If an error occurs, an error code is returned 
+** of the virtual table pTab. If an error occurs, an error code is returned
 ** and an error left in pParse.
 **
 ** This call is a no-op if table pTab is not a virtual table.
@@ -415,7 +408,7 @@ static void addToVTrans(sqlite3 *db, VTable *pVTab){
 
 /*
 ** This function is invoked by the vdbe to call the xCreate method
-** of the virtual table named zTab in database iDb. 
+** of the virtual table named zTab in database iDb.
 **
 ** If an error occurs, *pzErr is set to point an an English language
 ** description of the error and an SQLITE_XXX error code is returned.
@@ -433,8 +426,8 @@ static void addToVTrans(sqlite3 *db, VTable *pVTab){
   zMod = pTab.azModuleArg[0];
   pMod = db.Modules[zMod]
 
-  /* If the module has been registered and includes a Create method, 
-  ** invoke it now. If the module has not been registered, return an 
+  /* If the module has been registered and includes a Create method,
+  ** invoke it now. If the module has not been registered, return an
   ** error. Otherwise, do nothing.
   */
   if( !pMod ){
@@ -454,61 +447,47 @@ static void addToVTrans(sqlite3 *db, VTable *pVTab){
   return rc;
 }
 
-/*
-** This function is used to set the schema of a virtual table.  It is only
-** valid to call this function from within the xCreate() or xConnect() of a
-** virtual table module.
-*/
-func int sqlite3_declare_vtab(sqlite3 *db, const char *zCreateTable){
-  Parse *pParse;
+//	This function is used to set the schema of a virtual table. It is only valid to call this function from within the xCreate() or xConnect() of a virtual table module.
+func (db *sqlite3) DeclareVTab(zCreateTable string) (rc int) {
+	db.mutex.CriticalSection(func() {
+		if table := db.pVtabCtx.pTab; db.pVtabCtx != nil && table != nil {
+			assert( table.tabFlags & TF_Virtual != 0 )
+			pParse := new(Parse)
+			pParse.declareVtab = 1
+			pParse.db = db
+			pParse.nQueryLoop = 1
 
-  int rc = SQLITE_OK;
-  Table *pTab;
-  char *zErr = 0;
+			if Error, ok := pParse.Run(zCreateTable); ok == SQLITE_OK && pParse.pNewTable != nil && !db.mallocFailed && !pParse.pNewTable.Select && pParse.pNewTable.tabFlags & TF_Virtual == 0 {
+				if table.Columns == nil {
+					table.Columns = pParse.pNewTable.Columns
+					table.nCol = pParse.pNewTable.nCol
+					pParse.pNewTable.nCol = 0
+					pParse.pNewTable.Columns = 0
+				}
+				db.pVtabCtx.pTab = nil
+			} else {
+				if Error != "" {
+					db.Error(SQLITE_ERROR, "%s", Error)
+				} else {
+					db.Error(SQLITE_ERROR, "", Error)
+				}
+				rc = SQLITE_ERROR
+			}
+			pParse.declareVtab = 0
 
-  db.mutex.Lock()
-  if !db.pVtabCtx || !(pTab = db.pVtabCtx.pTab) {
-    db.Error(SQLITE_MISUSE, "");
-    db.mutex.Unlock()
-    return SQLITE_MISUSE_BKPT;
-  }
-  assert( (pTab.tabFlags & TF_Virtual)!=0 );
-
-  pParse = sqlite3StackAllocZero(db, sizeof(*pParse));
-  if( pParse==0 ){
-    rc = SQLITE_NOMEM;
-  }else{
-    pParse.declareVtab = 1;
-    pParse.db = db;
-    pParse.nQueryLoop = 1;
-  
-    if pParse.Run(zCreateTable, &zErr) == SQLITE_OK && pParse.pNewTable != nil && !db.mallocFailed && !pParse.pNewTable.Select && pParse.pNewTable.tabFlags & TF_Virtual == 0 {
-      if( !pTab.Columns ){
-        pTab.Columns = pParse.pNewTable.Columns;
-        pTab.nCol = pParse.pNewTable.nCol;
-        pParse.pNewTable.nCol = 0;
-        pParse.pNewTable.Columns = 0;
-      }
-      db.pVtabCtx.pTab = nil
-    }else{
-      db.Error(SQLITE_ERROR, (zErr ? "%s" : 0), zErr);
-      zErr = nil
-      rc = SQLITE_ERROR;
-    }
-    pParse.declareVtab = 0;
-  
-    if pParse.pVdbe != nil {
-      pParse.pVdbe.Finalize()
-    }
-    db.DeleteTable(pParse.pNewTable)
-	pParse.pNewTable = nil
-    sqlite3StackFree(db, pParse)
-  }
-
-  assert( (rc&0xff)==rc );
-  rc = db.ApiExit(rc)
-  db.mutex.Unlock()
-  return rc;
+			if pParse.pVdbe != nil {
+				pParse.pVdbe.Finalize()
+			}
+			db.DeleteTable(pParse.pNewTable)
+			pParse.pNewTable = nil
+			assert( rc & 0xff == rc )
+			rc = db.ApiExit(rc)
+		} else {
+			db.Error(SQLITE_MISUSE, "")
+			rc = SQLITE_MISUSE_BKPT
+		}
+	})
+	return
 }
 
 //	This function is invoked by the vdbe to call the xDestroy method of the virtual table named zTab in database iDb. This occurs when a DROP TABLE is mentioned.
@@ -529,7 +508,7 @@ func (db *sqlite3) VtabCallDestroy(iDb int, zTab string) (rc int) {
 }
 
 //	This function invokes either the xRollback or xCommit method of each of the virtual tables in the sqlite3.aVTrans array. The method called is identified by the second argument, "offset", which is the offset of the method to call in the sqlite3_module structure.
-//	The array is cleared after invoking the callbacks. 
+//	The array is cleared after invoking the callbacks.
 func (db *sqlite3) CallFinaliser(offset int) {
 	if db.aVTrans != nil {
 		for i := 0; i < db.nVTrans; i++ {
@@ -597,7 +576,7 @@ func (db *sqlite3) VtabCommit() int {
 
   /* Special case: If db.aVTrans is NULL and db.nVTrans is greater
   ** than zero, then this function is being called from within a
-  ** virtual module xSync() callback. It is illegal to write to 
+  ** virtual module xSync() callback. It is illegal to write to
   ** virtual module tables in this case, so return SQLITE_LOCKED.
   */
   if db.nVTrans > 0 && db.aVTrans == 0 {
@@ -605,7 +584,7 @@ func (db *sqlite3) VtabCommit() int {
   }
   if( !pVTab ){
     return SQLITE_OK;
-  } 
+  }
   pModule = pVTab.pVtab.Callbacks;
 
   if( pModule.xBegin ){
@@ -618,7 +597,7 @@ func (db *sqlite3) VtabCommit() int {
       }
     }
 
-    /* Invoke the xBegin method. If successful, add the vtab to the 
+    /* Invoke the xBegin method. If successful, add the vtab to the
     ** sqlite3.aVTrans[] array. */
     rc = growVTrans(db);
     if( rc==SQLITE_OK ){
@@ -637,11 +616,11 @@ func (db *sqlite3) VtabCommit() int {
 ** as the second argument to the virtual table method invoked.
 **
 ** If op is SAVEPOINT_BEGIN, the xSavepoint method is invoked. If it is
-** SAVEPOINT_ROLLBACK, the xRollbackTo method. Otherwise, if op is 
+** SAVEPOINT_ROLLBACK, the xRollbackTo method. Otherwise, if op is
 ** SAVEPOINT_RELEASE, then the xRelease method of each virtual table with
 ** an open transaction is invoked.
 **
-** If any virtual table method returns an error code other than SQLITE_OK, 
+** If any virtual table method returns an error code other than SQLITE_OK,
 ** processing is abandoned and the error returned to the caller of this
 ** function immediately. If all calls to virtual table methods are successful,
 ** SQLITE_OK is returned.
@@ -688,7 +667,7 @@ func (db *sqlite3) VtabCommit() int {
 ** This routine is used to allow virtual table implementations to
 ** overload MATCH, LIKE, GLOB, and REGEXP operators.
 **
-** Return either the pDef argument (indicating no change) or a 
+** Return either the pDef argument (indicating no change) or a
 ** new FuncDef structure that is marked as ephemeral using the
 ** SQLITE_FUNC_EPHEM flag.
 */
@@ -720,9 +699,9 @@ func (db *sqlite3) VtabCommit() int {
   assert( pVtab.Callbacks!=0 );
   pMod = (sqlite3_module *)pVtab.Callbacks;
   if( pMod.xFindFunction==0 ) return pDef;
- 
+
   /* Call the xFindFunction method on the virtual table implementation
-  ** to see if the implementation wants to overload this function 
+  ** to see if the implementation wants to overload this function
   */
   zLowerName = sqlite3DbStrDup(db, pDef.Name);
   if( zLowerName ){
@@ -785,8 +764,8 @@ func (db *sqlite3) VtabCommit() int {
 ** within an xUpdate method.
 */
 func int sqlite3_vtab_on_conflict(sqlite3 *db){
-  static const unsigned char aMap[] = { 
-    SQLITE_ROLLBACK, SQLITE_ABORT, SQLITE_FAIL, SQLITE_IGNORE, SQLITE_REPLACE 
+  static const unsigned char aMap[] = {
+    SQLITE_ROLLBACK, SQLITE_ABORT, SQLITE_FAIL, SQLITE_IGNORE, SQLITE_REPLACE
   };
   assert( OE_Rollback==1 && OE_Abort==2 && OE_Fail==3 );
   assert( OE_Ignore==4 && OE_Replace==5 );

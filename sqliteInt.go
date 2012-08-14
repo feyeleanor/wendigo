@@ -1435,10 +1435,10 @@ struct sqlite3_mem_methods {
 ** statistics. ^(When memory allocation statistics are disabled, the
 ** following SQLite interfaces become non-operational:
 **   <ul>
-**   <li> [sqlite3_memory_used()]
-**   <li> [sqlite3_memory_highwater()]
-**   <li> [sqlite3_soft_heap_limit64()]
-**   <li> [sqlite3_status()]
+**   <li> [MemoryUsed()]
+**   <li> [MemoryHighwater()]
+**   <li> SetHeapLimit()
+**   <li> [Status()]
 **   </ul>)^
 ** ^Memory allocation statistics are enabled by default unless SQLite is
 ** compiled with [SQLITE_DEFAULT_MEMSTATUS]=0 in which case memory
@@ -2115,31 +2115,10 @@ func void sqlite3_free_table(char **result);
 func void *sqlite3_malloc(int);
 func void *sqlite3_realloc(void*, int);
 
-/*
-** CAPI3REF: Memory Allocator Statistics
-**
-** SQLite provides these two interfaces for reporting on the status
-** of the [sqlite3_malloc()] and [sqlite3_realloc()]
-** routines, which form the built-in memory allocation subsystem.
-**
-** ^The [sqlite3_memory_used()] routine returns the number of bytes
-** of memory currently outstanding (malloced but not freed).
-** ^The [sqlite3_memory_highwater()] routine returns the maximum
-** value of [sqlite3_memory_used()] since the high-water mark
-** was last reset.  ^The values returned by [sqlite3_memory_used()] and
-** [sqlite3_memory_highwater()] include any overhead
-** added by SQLite in its implementation of [sqlite3_malloc()],
-** but not overhead added by the any underlying system library
-** routines that [sqlite3_malloc()] may call.
-**
-** ^The memory high-water mark is reset to the current value of
-** [sqlite3_memory_used()] if and only if the parameter to
-** [sqlite3_memory_highwater()] is true.  ^The value returned
-** by [sqlite3_memory_highwater(1)] is the high-water mark
-** prior to the reset.
-*/
-func int64 sqlite3_memory_used(void);
-func int64 sqlite3_memory_highwater(int resetFlag);
+//	CAPI3REF: Memory Allocator Statistics
+//	SQLite provides these two interfaces for reporting on the status of the [sqlite3_malloc()] and [sqlite3_realloc()] routines, which form the built-in memory allocation subsystem.
+//	The [MemoryUsed()] routine returns the number of bytes of memory currently outstanding (malloced but not freed). The [MemoryHighwater()] routine returns the maximum value of [MemoryUsed()] since the high-water mark was last reset. The values returned by [MemoryUsed()] and [MemoryHighwater()] include any overhead added by SQLite in its implementation of [sqlite3_malloc()], but not overhead added by the any underlying system library routines that [sqlite3_malloc()] may call.
+//	The memory high-water mark is reset to the current value of [MemoryUsed()] if and only if the parameter to [MemoryHighwater()] is true. The value returned by [MemoryHighwater(true)] is the high-water mark prior to the reset.
 
 /*
 ** CAPI3REF: Compile-Time Authorization Callbacks
@@ -3166,9 +3145,6 @@ func const char *sqlite3_column_name(sqlite3_stmt*, int N);
 ** NULL.  ^These routine might also return NULL if a memory allocation error
 ** occurs.  ^Otherwise, they return the name of the attached database, table,
 ** or column that query result column was extracted from.
-**
-** ^These APIs are only available if the library was compiled with the
-** [SQLITE_ENABLE_COLUMN_METADATA] C-preprocessor symbol.
 **
 ** If two or more threads call one or more of these routines against the same
 ** prepared statement and column at the same time then the results are
@@ -4306,72 +4282,6 @@ func void *sqlite3_update_hook(
 );
 
 /*
-** CAPI3REF: Attempt To Free Heap Memory
-**
-** ^The ReleaseMemory() interface attempts to free N bytes
-** of heap memory by deallocating non-essential memory allocations
-** held by the database library.   Memory used to cache database
-** pages to improve performance is an example of non-essential memory.
-** ^ReleaseMemory() returns the number of bytes actually freed,
-** which might be more or less than the amount requested.
-** ^The ReleaseMemory() routine is a no-op returning zero
-** if SQLite is not compiled with [SQLITE_ENABLE_MEMORY_MANAGEMENT].
-*/
-func int ReleaseMemory(int);
-
-/*
-** CAPI3REF: Impose A Limit On Heap Size
-**
-** ^The sqlite3_soft_heap_limit64() interface sets and/or queries the
-** soft limit on the amount of heap memory that may be allocated by SQLite.
-** ^SQLite strives to keep heap memory utilization below the soft heap
-** limit by reducing the number of pages held in the page cache
-** as heap memory usages approaches the limit.
-** ^The soft heap limit is "soft" because even though SQLite strives to stay
-** below the limit, it will exceed the limit rather than generate
-** an [SQLITE_NOMEM] error.  In other words, the soft heap limit
-** is advisory only.
-**
-** ^The return value from sqlite3_soft_heap_limit64() is the size of
-** the soft heap limit prior to the call, or negative in the case of an
-** error.  ^If the argument N is negative
-** then no change is made to the soft heap limit.  Hence, the current
-** size of the soft heap limit can be determined by invoking
-** sqlite3_soft_heap_limit64() with a negative argument.
-**
-** ^If the argument N is zero then the soft heap limit is disabled.
-**
-** ^(The soft heap limit is not enforced in the current implementation
-** if one or more of following conditions are true:
-**
-** <ul>
-** <li> The soft heap limit is set to zero.
-** <li> Memory accounting is disabled using a combination of the
-**      [sqlite3_config]([SQLITE_CONFIG_MEMSTATUS],...) start-time option and
-**      the [SQLITE_DEFAULT_MEMSTATUS] compile-time option.
-** <li> An alternative page cache implementation is specified using
-**      [sqlite3_config]([SQLITE_CONFIG_PCACHE2],...).
-** <li> The page cache allocates from its own memory pool supplied
-**      by [sqlite3_config]([SQLITE_CONFIG_PAGECACHE],...) rather than
-**      from the heap.
-** </ul>)^
-**
-** Beginning with SQLite version 3.7.3, the soft heap limit is enforced
-** regardless of whether or not the [SQLITE_ENABLE_MEMORY_MANAGEMENT]
-** compile-time option is invoked.  With [SQLITE_ENABLE_MEMORY_MANAGEMENT],
-** the soft heap limit is enforced on every memory allocation.  Without
-** [SQLITE_ENABLE_MEMORY_MANAGEMENT], the soft heap limit is only enforced
-** when memory is allocated by the page cache.  Testing suggests that because
-** the page cache is the predominate memory user in SQLite, most
-** applications will achieve adequate soft heap limit enforcement without
-** the use of [SQLITE_ENABLE_MEMORY_MANAGEMENT].
-**
-** The circumstances under which SQLite will enforce the soft heap limit may
-** changes in future releases of SQLite.
-*/
-func int64 sqlite3_soft_heap_limit64(int64 N);
-
-/*
 ** CAPI3REF: Extract Metadata About A Column Of A Table
 **
 ** ^This routine returns metadata about a specific column of a specific
@@ -4429,21 +4339,7 @@ func int64 sqlite3_soft_heap_limit64(int64 N);
 ** error occurs during this process, or if the requested table or column
 ** cannot be found, an [error code] is returned and an error message left
 ** in the [database connection] (to be retrieved using sqlite3_errmsg()).)^
-**
-** ^This API is only available if the library was compiled with the
-** [SQLITE_ENABLE_COLUMN_METADATA] C-preprocessor symbol defined.
 */
-func int sqlite3_table_column_metadata(
-  sqlite3 *db,                /* Connection handle */
-  const char *zDbName,        /* Database name or NULL */
-  const char *zTableName,     /* Table name */
-  const char *zColumnName,    /* Column name */
-  char const **pzDataType,    /* OUTPUT: Declared data type */
-  char const **pzCollSeq,     /* OUTPUT: Collation sequence name */
-  int *pNotNull,              /* OUTPUT: True if NOT NULL constraint exists */
-  int *pPrimaryKey,           /* OUTPUT: True if column part of PK */
-  int *pAutoinc               /* OUTPUT: True if column is auto-increment */
-);
 
 /*
 ** CAPI3REF: Load An Extension
@@ -4743,15 +4639,8 @@ struct sqlite3_vtab_cursor {
   /* Virtual table implementations will typically add additional fields */
 };
 
-/*
-** CAPI3REF: Declare The Schema Of A Virtual Table
-**
-** ^The [xCreate] and [xConnect] methods of a
-** [virtual table module] call this interface
-** to declare the format (the names and datatypes of the columns) of
-** the virtual tables they implement.
-*/
-func int sqlite3_declare_vtab(sqlite3*, const char *zSQL);
+//	CAPI3REF: Declare The Schema Of A Virtual Table
+//	The [xCreate] and [xConnect] methods of a [virtual table module] call this interface to declare the format (the names and datatypes of the columns) of the virtual tables they implement.
 
 /*
 ** CAPI3REF: Overload A Function For A Virtual Table
@@ -4788,7 +4677,7 @@ func int sqlite3_overload_function(sqlite3*, const char *zFuncName, int nArg);
 ** An instance of this object represents an open BLOB on which
 ** [sqlite3_blob_open | incremental BLOB I/O] can be performed.
 ** ^Objects of this type are created by [sqlite3_blob_open()]
-** and destroyed by [sqlite3_blob_close()].
+** and destroyed by [sqlite3_blob::Close()].
 ** ^The [sqlite3_blob_read()] and [sqlite3_blob_write()] interfaces
 ** can be used to read or write small subsections of the BLOB.
 ** ^The [sqlite3_blob_bytes()] interface returns the size of the BLOB in bytes.
@@ -4824,7 +4713,7 @@ typedef struct sqlite3_blob sqlite3_blob;
 ** ^This function sets the [database connection] error code and message
 ** accessible via [sqlite3_errcode()] and [sqlite3_errmsg()] and related
 ** functions. ^Note that the *ppBlob variable is always initialized in a
-** way that makes it safe to invoke [sqlite3_blob_close()] on *ppBlob
+** way that makes it safe to invoke [sqlite3_blob::Close()] on *ppBlob
 ** regardless of the success or failure of this routine.
 **
 ** ^(If the row that a BLOB handle points to is modified by an
@@ -4849,7 +4738,7 @@ typedef struct sqlite3_blob sqlite3_blob;
 ** this interface.
 **
 ** To avoid a resource leak, every open [BLOB handle] should eventually
-** be released by a call to [sqlite3_blob_close()].
+** be released by a call to [sqlite3_blob::Close()].
 */
 func int sqlite3_blob_open(
   sqlite3*,
@@ -4884,29 +4773,12 @@ func int sqlite3_blob_open(
 ** ^This function sets the database handle error code and message.
 */
 
-/*
-** CAPI3REF: Close A BLOB Handle
-**
-** ^Closes an open [BLOB handle].
-**
-** ^Closing a BLOB shall cause the current transaction to commit
-** if there are no other BLOBs, no pending prepared statements, and the
-** database connection is in [autocommit mode].
-** ^If any writes were made to the BLOB, they might be held in cache
-** until the close operation if they will fit.
-**
-** ^(Closing the BLOB often forces the changes
-** out to disk and so if any I/O errors occur, they will likely occur
-** at the time when the BLOB is closed.  Any errors that occur during
-** closing are reported as a non-zero return value.)^
-**
-** ^(The BLOB is closed unconditionally.  Even if this routine returns
-** an error code, the BLOB is still closed.)^
-**
-** ^Calling this routine with a null pointer (such as would be returned
-** by a failed call to [sqlite3_blob_open()]) is a harmless no-op.
-*/
-func int sqlite3_blob_close(sqlite3_blob *);
+//	CAPI3REF: Close A BLOB Handle
+//	Closes an open [BLOB handle].
+//	Closing a BLOB shall cause the current transaction to commit if there are no other BLOBs, no pending prepared statements, and the database connection is in [autocommit mode]. If any writes were made to the BLOB, they might be held in cache until the close operation if they will fit.
+//	(Closing the BLOB often forces the changes out to disk and so if any I/O errors occur, they will likely occur at the time when the BLOB is closed. Any errors that occur during closing are reported as a non-zero return value.)
+//	(The BLOB is closed unconditionally. Even if this routine returns an error code, the BLOB is still closed.)
+//	Calling this routine with a null pointer (such as would be returned by a failed call to [sqlite3_blob_open()]) is a harmless no-op.
 
 /*
 ** CAPI3REF: Return The Size Of An Open BLOB
@@ -4918,7 +4790,7 @@ func int sqlite3_blob_close(sqlite3_blob *);
 **
 ** This routine only works on a [BLOB handle] which has been created
 ** by a prior successful call to [sqlite3_blob_open()] and which has not
-** been closed by [sqlite3_blob_close()].  Passing any other pointer in
+** been closed by [sqlite3_blob::Close()].  Passing any other pointer in
 ** to this routine results in undefined and probably undesirable behavior.
 */
 func int sqlite3_blob_bytes(sqlite3_blob *);
@@ -4944,7 +4816,7 @@ func int sqlite3_blob_bytes(sqlite3_blob *);
 **
 ** This routine only works on a [BLOB handle] which has been created
 ** by a prior successful call to [sqlite3_blob_open()] and which has not
-** been closed by [sqlite3_blob_close()].  Passing any other pointer in
+** been closed by [sqlite3_blob::Close()].  Passing any other pointer in
 ** to this routine results in undefined and probably undesirable behavior.
 **
 ** See also: [sqlite3_blob_write()].
@@ -4982,7 +4854,7 @@ func int sqlite3_blob_read(sqlite3_blob *, void *Z, int N, int iOffset);
 **
 ** This routine only works on a [BLOB handle] which has been created
 ** by a prior successful call to [sqlite3_blob_open()] and which has not
-** been closed by [sqlite3_blob_close()].  Passing any other pointer in
+** been closed by [sqlite3_blob::Close()].  Passing any other pointer in
 ** to this routine results in undefined and probably undesirable behavior.
 **
 ** See also: [sqlite3_blob_read()].
@@ -5273,36 +5145,11 @@ func sqlite3_mutex *sqlite3_db_mutex(sqlite3*);
 */
 func int sqlite3_file_control(sqlite3*, const char *zDbName, int op, void*);
 
-/*
-** CAPI3REF: SQLite Runtime Status
-**
-** ^This interface is used to retrieve runtime status information
-** about the performance of SQLite, and optionally to reset various
-** highwater marks.  ^The first argument is an integer code for
-** the specific parameter to measure.  ^(Recognized integer codes
-** are of the form [status parameters | SQLITE_STATUS_...].)^
-** ^The current value of the parameter is returned into *pCurrent.
-** ^The highest recorded value is returned in *pHighwater.  ^If the
-** resetFlag is true, then the highest record value is reset after
-** *pHighwater is written.  ^(Some parameters do not record the highest
-** value.  For those parameters
-** nothing is written into *pHighwater and the resetFlag is ignored.)^
-** ^(Other parameters record only the highwater mark and not the current
-** value.  For these latter parameters nothing is written into *pCurrent.)^
-**
-** ^The sqlite3_status() routine returns SQLITE_OK on success and a
-** non-zero [error code] on failure.
-**
-** This routine is threadsafe but is not atomic.  This routine can be
-** called while other threads are running the same or different SQLite
-** interfaces.  However the values returned in *pCurrent and
-** *pHighwater reflect the status of SQLite at different points in time
-** and it is possible that another thread might change the parameter
-** in between the times when *pCurrent and *pHighwater are written.
-**
-** See also: [sqlite3_db_status()]
-*/
-func int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
+//	CAPI3REF: SQLite Runtime Status
+//	This interface is used to retrieve runtime status information about the performance of SQLite, and optionally to reset various highwater marks. The first argument is an integer code for the specific parameter to measure. (Recognized integer codes are of the form [status parameters | SQLITE_STATUS_...].) The current value of the parameter is returned into *pCurrent. The highest recorded value is returned in *pHighwater. If the resetFlag is true, then the highest record value is reset after *pHighwater is written.  ^(Some parameters do not record the highest value. For those parameters nothing is written into *pHighwater and the resetFlag is ignored.) (Other parameters record only the highwater mark and not the current value. For these latter parameters nothing is written into *pCurrent.)
+//	The Status() routine returns SQLITE_OK on success and a non-zero [error code] on failure.
+//	This routine is threadsafe but is not atomic. This routine can be called while other threads are running the same or different SQLite interfaces. However the values returned in *pCurrent and *pHighwater reflect the status of SQLite at different points in time and it is possible that another thread might change the parameter in between the times when *pCurrent and *pHighwater are written.
+//	See also: [sqlite3_db_status()]
 
 
 /*
@@ -5310,7 +5157,7 @@ func int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 ** KEYWORDS: {status parameters}
 **
 ** These integer constants designate various run-time status parameters
-** that can be returned by [sqlite3_status()].
+** that can be returned by [Status()].
 **
 ** <dl>
 ** [[SQLITE_STATUS_MEMORY_USED]] ^(<dt>SQLITE_STATUS_MEMORY_USED</dt>
@@ -5327,7 +5174,7 @@ func int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 ** <dd>This parameter records the largest memory allocation request
 ** handed to [sqlite3_malloc()] or [sqlite3_realloc()] (or their
 ** internal equivalents).  Only the value returned in the
-** *pHighwater parameter to [sqlite3_status()] is of interest.
+** *pHighwater parameter to [Status()] is of interest.
 ** The value written into the *pCurrent parameter is undefined.</dd>)^
 **
 ** [[SQLITE_STATUS_MALLOC_COUNT]] ^(<dt>SQLITE_STATUS_MALLOC_COUNT</dt>
@@ -5353,7 +5200,7 @@ func int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 ** [[SQLITE_STATUS_PAGECACHE_SIZE]] ^(<dt>SQLITE_STATUS_PAGECACHE_SIZE</dt>
 ** <dd>This parameter records the largest memory allocation request
 ** handed to [pagecache memory allocator].  Only the value returned in the
-** *pHighwater parameter to [sqlite3_status()] is of interest.
+** *pHighwater parameter to [Status()] is of interest.
 ** The value written into the *pCurrent parameter is undefined.</dd>)^
 **
 ** [[SQLITE_STATUS_SCRATCH_USED]] ^(<dt>SQLITE_STATUS_SCRATCH_USED</dt>
@@ -5377,7 +5224,7 @@ func int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 ** [[SQLITE_STATUS_SCRATCH_SIZE]] ^(<dt>SQLITE_STATUS_SCRATCH_SIZE</dt>
 ** <dd>This parameter records the largest memory allocation request
 ** handed to [scratch memory allocator].  Only the value returned in the
-** *pHighwater parameter to [sqlite3_status()] is of interest.
+** *pHighwater parameter to [Status()] is of interest.
 ** The value written into the *pCurrent parameter is undefined.</dd>)^
 **
 ** [[SQLITE_STATUS_PARSER_STACK]] ^(<dt>SQLITE_STATUS_PARSER_STACK</dt>
@@ -5418,7 +5265,7 @@ func int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag);
 ** ^The sqlite3_db_status() routine returns SQLITE_OK on success and a
 ** non-zero [error code] on failure.
 **
-** See also: [sqlite3_status()] and [sqlite3_stmt_status()].
+** See also: [Status()] and [sqlite3_stmt_status()].
 */
 func int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFlg);
 
@@ -5540,7 +5387,7 @@ func int sqlite3_db_status(sqlite3*, int op, int *pCur, int *pHiwtr, int resetFl
 ** ^If the resetFlg is true, then the counter is reset to zero after this
 ** interface call returns.
 **
-** See also: [sqlite3_status()] and [sqlite3_db_status()].
+** See also: [Status()] and [sqlite3_db_status()].
 */
 func int sqlite3_stmt_status(sqlite3_stmt*, int op,int resetFlg);
 
@@ -6856,7 +6703,6 @@ typedef struct BtShared BtShared;
  int sqlite3BtreeGetReserve(Btree*);
  int sqlite3BtreeSetAutoVacuum(Btree *, int);
  int sqlite3BtreeGetAutoVacuum(Btree *);
- int sqlite3BtreeBeginTrans(Btree*,int);
  int sqlite3BtreeBeginStmt(Btree*,int);
  int sqlite3BtreeCreateTable(Btree*, int*, int flags);
  int sqlite3BtreeIsInBackup(Btree*);
@@ -6941,10 +6787,7 @@ typedef struct BtShared BtShared;
  char *sqlite3BtreeIntegrityCheck(Btree*, int *aRoot, int nRoot, int, int*);
 
  int sqlite3BtreePutData(btree.Cursor*, uint32 offset, uint32 amt, void*);
- void sqlite3BtreeCacheOverflow(btree.Cursor *);
  void sqlite3BtreeClearCursor(btree.Cursor *);
-
- int sqlite3BtreeSetVersion(Btree *pBt, int iVersion);
 
  int sqlite3BtreeCount(btree.Cursor *, int64 *);
 
@@ -7066,15 +6909,7 @@ type VdbeOpList {
 #define COLNAME_DATABASE 2
 #define COLNAME_TABLE    3
 #define COLNAME_COLUMN   4
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
 # define COLNAME_N        5      /* Number of COLNAME_xxx symbols */
-#else
-# ifdef SQLITE_OMIT_DECLTYPE
-#   define COLNAME_N      1      /* Store only the name */
-# else
-#   define COLNAME_N      2      /* Store the name and decltype */
-# endif
-#endif
 
 //	The following macro converts a relative address in the p2 field of a VdbeOp structure into a negative number so that Vdbe::AddOpList() knows that the address is relative. Calling the macro again restores the address.
 #define ADDR(X)  (-1-(X))
@@ -7398,10 +7233,8 @@ typedef struct PgHdr DbPage;
 /* Functions used to obtain and release page references. */
  DbPage *sqlite3PagerLookup(Pager *pPager, PageNumber pgno);
  void sqlite3PagerRef(DbPage*);
- void sqlite3PagerUnref(DbPage*);
 
 /* Operations on page references. */
- int sqlite3PagerWrite(DbPage*);
  void sqlite3PagerDontWrite(DbPage*);
  int sqlite3PagerMovepage(Pager*,DbPage*,PageNumber,int);
  int sqlite3PagerPageRefcount(DbPage*);
@@ -7507,11 +7340,7 @@ struct PgHdr {
 */
  int sqlite3PcacheSize(void);
 
-/* One release per successful fetch.  Page is pinned until released.
-** Reference counted.
-*/
- void sqlite3PcacheRelease(PgHdr*);
-
+//	Page is pinned until released. Reference counted.
  void sqlite3PcacheDrop(PgHdr*);         /* Remove page from cache */
  void sqlite3PcacheMakeDirty(PgHdr*);    /* Make sure page is marked dirty */
  void sqlite3PcacheMakeClean(PgHdr*);    /* Mark a single page as clean */
@@ -7523,11 +7352,6 @@ struct PgHdr {
  void sqlite3PcacheRef(PgHdr*);
 
  int sqlite3PcachePageRefcount(PgHdr*);
-
-#ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
-/* Try to return memory used by the pcache module to the main memory heap */
- int sqlite3PcacheReleaseMemory(int);
-#endif
 
  void sqlite3PCacheSetDefault(void);
 
@@ -9107,7 +8931,7 @@ struct Parse {
   int nVar;                 /* Number of '?' variables seen in the SQL so far */
   int nzVar;                /* Number of available slots in azVar[] */
   byte explain;               /* True if the EXPLAIN flag is found on the query */
-  byte declareVtab;           /* True if inside sqlite3_declare_vtab() */
+  byte declareVtab;           /* True if inside DeclareVTab(() */
   int nVtabLock;            /* Number of virtual tables to lock */
   int nAlias;               /* Number of aliased result set columns */
 #ifndef SQLITE_OMIT_EXPLAIN
@@ -9129,10 +8953,8 @@ struct Parse {
   TriggerPrg *pTriggerPrg;  /* Linked list of coded triggers */
 };
 
-/*
-** Return true if currently inside an sqlite3_declare_vtab() call.
-*/
-  #define IN_DECLARE_VTAB (pParse.declareVtab)
+//	Return true if currently inside an DeclareVTab(() call.
+#define IN_DECLARE_VTAB (pParse.declareVtab)
 
 /*
 ** An instance of the following structure can be declared on a stack and used
@@ -9291,7 +9113,6 @@ struct Sqlite3Config {
  void *sqlite3PageMalloc(int);
  void sqlite3PageFree(void*);
  void sqlite3MemSetDefault(void);
- int sqlite3HeapNearlyFull(void);
 
 /*
 ** On systems with ample stack space and that support alloca(), make

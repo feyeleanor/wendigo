@@ -127,7 +127,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db){
   if pzErrMsg, rc = db.ExecSql("BEGIN;"); rc != SQLITE_OK {
 	  goto end_of_vacuum
   }
-  if rc = sqlite3BtreeBeginTrans(pMain, 2); rc != SQLITE_OK {
+  if rc = pMain.BeginTransaction(2); rc != SQLITE_OK {
 	  goto end_of_vacuum
   }
 

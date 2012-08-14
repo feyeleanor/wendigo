@@ -41,9 +41,7 @@ func (p *Incrblob) SeekToRow(iRow int64) (rc int, Err string) {
 			p.iOffset = v.apCsr[0].aOffset[p.iCol]
 			p.nByte = VdbeSerialTypeLen(Type)
 			p.pCsr =  v.apCsr[0].pCursor
-			p.pCsr.CriticalSection(func() {
-				sqlite3BtreeCacheOverflow(p.pCsr)
-			})
+			p.pCsr.CacheOverflow()
 		}
 	}
 
@@ -118,7 +116,7 @@ func int sqlite3_blob_open(
         pParse.zErrMsg = 0;
       }
       rc = SQLITE_ERROR;
-      db.LeaveBtreeAll()
+      db.UnlockAll()
       goto blob_open_out;
     }
 
@@ -131,7 +129,7 @@ func int sqlite3_blob_open(
     if( iCol==pTab.nCol ){
       zErr = fmt.Sprintf("no such column: \"%v\"", zColumn);
       rc = SQLITE_ERROR;
-      db.LeaveBtreeAll()
+      db.UnlockAll()
       goto blob_open_out;
     }
 
@@ -158,7 +156,7 @@ func int sqlite3_blob_open(
       if zFault != "" {
         zErr = fmt.Sprintf("cannot open %v column for writing", zFault)
         rc = SQLITE_ERROR
-        db.LeaveBtreeAll()
+        db.UnlockAll()
         goto blob_open_out
       }
     }
@@ -182,7 +180,7 @@ func int sqlite3_blob_open(
       v.ChangeP3(1, pTab.Schema.iGeneration)
 
       /* Make sure a mutex is held on the table to be accessed */
-      sqlite3VdbeUsesBtree(v, iDb); 
+      sqlite3VdbeUsesBtree(v, iDb);
 
       /* Configure the OP_TableLock instruction */
       v.ChangeP1(2, iDb)
@@ -190,7 +188,7 @@ func int sqlite3_blob_open(
       v.ChangeP3(2, flags)
       sqlite3VdbeChangeP4(v, 2, pTab.Name, P4_TRANSIENT);
 
-      /* Remove either the OP_OpenWrite or OpenRead. Set the P2 
+      /* Remove either the OP_OpenWrite or OpenRead. Set the P2
       ** parameter of the other to pTab.tnum.  */
       v.ChangeToNoop(4 - flags)
       v.ChangeP2(3 + flags, pTab.tnum)
@@ -200,7 +198,7 @@ func int sqlite3_blob_open(
       ** think that the table has one more column than it really
       ** does. An OP_Column to retrieve this imaginary column will
       ** always return an SQL NULL. This is useful because it means
-      ** we can invoke OP_Column to fill in the vdbe cursors type 
+      ** we can invoke OP_Column to fill in the vdbe cursors type
       ** and offset cache without causing any IO.
       */
       sqlite3VdbeChangeP4(v, 3+flags, SQLITE_INT_TO_PTR(pTab.nCol+1),P4_INT32);
@@ -212,11 +210,11 @@ func int sqlite3_blob_open(
         sqlite3VdbeMakeReady(v, pParse);
       }
     }
-   
+
     pBlob.flags = flags;
     pBlob.iCol = iCol;
     pBlob.db = db;
-    db.LeaveBtreeAll()
+    db.UnlockAll()
     if( db.mallocFailed ){
       goto blob_open_out;
     }
@@ -241,89 +239,59 @@ blob_open_out:
   return rc;
 }
 
-/*
-** Close a blob handle that was previously created using
-** sqlite3_blob_open().
-*/
-func int sqlite3_blob_close(sqlite3_blob *pBlob){
-  Incrblob *p = (Incrblob *)pBlob;
-  int rc;
-  sqlite3 *db;
-
-  if( p ){
-    db = p.db;
-    db.mutex.Lock()
-    rc = sqlite3_finalize(p.pStmt);
-    p = nil
-    db.mutex.Unlock()
-  }else{
-    rc = SQLITE_OK;
-  }
-  return rc;
+//	Close a blob handle that was previously created using sqlite3_blob_open().
+func (pBlob *sqlite3_blob) Close() (rc int) {
+	if p := (Incrblob *)pBlob; p != nil {
+		p.db.mutex.CriticalSection(func() {
+			rc = sqlite3_finalize(p.pStmt)
+		})
+	}
+	return
 }
 
-/*
-** Perform a read or write operation on a blob
-*/
-static int blobReadWrite(
-  sqlite3_blob *pBlob, 
-  void *z, 
-  int n, 
-  int iOffset, 
-  int (*xCall)(btree.Cursor*, uint32, uint32, void*)
-){
-  int rc;
-  Incrblob *p = (Incrblob *)pBlob;
-  Vdbe *v;
-  sqlite3 *db;
-
-  if( p==0 ) return SQLITE_MISUSE_BKPT;
-  db = p.db;
-  db.mutex.Lock()
-  v = (Vdbe*)p.pStmt;
-
-  if( n<0 || iOffset<0 || (iOffset+n)>p.nByte ){
-    /* Request is out of range. Return a transient error. */
-    rc = SQLITE_ERROR;
-    db.Error(SQLITE_ERROR, "");
-  }else if( v==0 ){
-    /* If there is no statement handle, then the blob-handle has
-    ** already been invalidated. Return SQLITE_ABORT in this case.
-    */
-    rc = SQLITE_ABORT;
-  }else{
-    /* Call either BtreeData() or BtreePutData(). If SQLITE_ABORT is
-    ** returned, clean-up the statement handle.
-    */
-    assert( db == v.db );
-    p.pCsr.Lock()
-    rc = xCall(p.pCsr, iOffset+p.iOffset, n, z);
-    p.pCsr.Unlock()
-    if( rc==SQLITE_ABORT ){
-      v.Finalize()
-      p.pStmt = 0;
-    }else{
-      db.errCode = rc;
-      v.rc = rc;
-    }
-  }
-  rc = db.ApiExit(rc)
-  db.mutex.Unlock()
-  return rc;
+//	Perform a read or write operation on a blob
+func (pBlob *sqlite3_blob) ReadWrite(z interface{}, n, iOffset int, xCall func(*btree.Cursor, uint32, uint32, interface{})) (rc int) {
+	if p := (Incrblob *)(pBlob); p != nil {
+		db := p.db
+		db.mutex.CriticalSection(func() {
+			switch v := (Vdbe*)(p.pStmt); {
+			case n < 0 || iOffset < 0 || iOffset + n > p.nByte:
+				//	Request is out of range. Return a transient error.
+				rc = SQLITE_ERROR
+				db.Error(SQLITE_ERROR, "")
+			case v == nil:
+				//	If there is no statement handle, then the blob-handle has already been invalidated. Return SQLITE_ABORT in this case.
+				rc = SQLITE_ABORT
+			default:
+				//	Call either BtreeData() or BtreePutData(). If SQLITE_ABORT is returned, clean-up the statement handle.
+				assert( db == v.db )
+				p.pCsr.CriticalSection(func() {
+					rc = xCall(p.pCsr, iOffset + p.iOffset, n, z)
+				})
+				if rc == SQLITE_ABORT {
+					v.Finalize()
+					p.pStmt = nil
+				} else {
+					db.errCode = rc
+					v.rc = rc
+				}
+			}
+			rc = db.ApiExit(rc)
+		})
+	} else {
+		rc = SQLITE_MISUSE_BKPT
+	}
+	return
 }
 
-/*
-** Read data from a blob handle.
-*/
+//	Read data from a blob handle.
 func int sqlite3_blob_read(sqlite3_blob *pBlob, void *z, int n, int iOffset){
-  return blobReadWrite(pBlob, z, n, iOffset, sqlite3BtreeData);
+  return pBlob.ReadWrite(z, n, iOffset, sqlite3BtreeData)
 }
 
-/*
-** Write data to a blob handle.
-*/
+//	Write data to a blob handle.
 func int sqlite3_blob_write(sqlite3_blob *pBlob, const void *z, int n, int iOffset){
-  return blobReadWrite(pBlob, (void *)z, n, iOffset, sqlite3BtreePutData);
+  return pBlob.ReadWrite(z, n, iOffset, sqlite3BtreePutData)
 }
 
 /*
@@ -340,34 +308,29 @@ func int sqlite3_blob_bytes(sqlite3_blob *pBlob){
 //	Move an existing blob handle to point to a different row of the same database table.
 //
 //	If an error occurs, or if the specified row does not exist or does not contain a blob or text value, then an error code is returned and the
-//	database handle error code and message set. If this happens, then all subsequent calls to sqlite3_blob_xxx() functions (except blob_close()) 
+//	database handle error code and message set. If this happens, then all subsequent calls to sqlite3_blob_xxx() functions (except blob_close())
 //	immediately return SQLITE_ABORT.
 
 func int sqlite3_blob_reopen(sqlite3_blob *pBlob, int64 iRow) {
-  rc	int
-  zErr	string
+	rc	int
+	zErr	string
 
-  p := (Incrblob *)(pBlob)
-  if( p==0 ) return SQLITE_MISUSE_BKPT;
-  db := p.db;
-  db.mutex.Lock()
-
-  if( p.pStmt==0 ){
-    /* If there is no statement handle, then the blob-handle has
-    ** already been invalidated. Return SQLITE_ABORT in this case.
-    */
-    rc = SQLITE_ABORT;
-  }else{
-    rc, zErr = p.SeekToRow(iRow)
-    if( rc!=SQLITE_OK ){
-      db.Error(rc, (zErr ? "%s" : 0), zErr)
-      zErr = nil
-    }
-    assert( rc!=SQLITE_SCHEMA );
-  }
-
-  rc = db.ApiExit(rc)
-  assert( rc==SQLITE_OK || p.pStmt==0 );
-  db.mutex.Unlock()
-  return rc;
+	p := (Incrblob *)(pBlob)
+	if( p==0 ) return SQLITE_MISUSE_BKPT;
+	db := p.db;
+	db.mutex.CriticalSection(func() {
+		if( p.pStmt==0 ){
+			//	If there is no statement handle, then the blob-handle has already been invalidated. Return SQLITE_ABORT in this case.
+			rc = SQLITE_ABORT
+		} else {
+			if rc, zErr = p.SeekToRow(iRow); rc!=SQLITE_OK {
+				db.Error(rc, (zErr ? "%s" : 0), zErr)
+				zErr = nil
+			}
+			assert( rc!=SQLITE_SCHEMA );
+		}
+		rc = db.ApiExit(rc)
+		assert( rc==SQLITE_OK || p.pStmt==0 );
+	})
+	return rc;
 }

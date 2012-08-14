@@ -160,7 +160,7 @@ static void clearSelect(sqlite3 *db, Select *p){
     if( pC==0 ){ zSp++; }
     pParse.SetErrorMsg("unknown or unsupported join type: %v %v%v%v", pA, pB, zSp, pC);
     jointype = JT_INNER;
-  }else if( (jointype & JT_OUTER)!=0 
+  }else if( (jointype & JT_OUTER)!=0
          && (jointype & (JT_LEFT|JT_RIGHT))!=JT_LEFT ){
     pParse.SetErrorMsg("RIGHT and FULL OUTER JOINs are not currently supported");
     jointype = JT_INNER;
@@ -184,7 +184,7 @@ static int columnIndex(Table *pTab, const char *zCol){
 
 /*
 ** Search the first N tables in pSrc, from left to right, looking for a
-** table that has a column named zCol.  
+** table that has a column named zCol.
 **
 ** When found, set *piTab and *piCol to the table index and column index
 ** of the matching column and return TRUE.
@@ -222,7 +222,7 @@ static int tableAndColumnIndex(
 **
 **    (tab1.col1 = tab2.col2)
 **
-** where tab1 is the iSrc'th table in SrcList pSrc and tab2 is the 
+** where tab1 is the iSrc'th table in SrcList pSrc and tab2 is the
 ** (iSrc+1)'th. Column col1 is column iColLeft of tab1, and col2 is
 ** column iColRight of tab2.
 */
@@ -289,7 +289,7 @@ static void setJoinExpr(Expr *p, int iTable){
     p.iRightJoinTable = (int16)iTable;
     setJoinExpr(p.pLeft, iTable);
     p = p.pRight;
-  } 
+  }
 }
 
 //	This routine processes the join information for a SELECT statement. ON and USING clauses are converted into extra terms of the WHERE clause. NATURAL joins also create extra WHERE clause terms.
@@ -338,7 +338,7 @@ func (pParse *Parse) ProcessJoin(p *Select) (errors int) {
 			pRight.pOn = 0
 		}
 
-		//	Create extra terms on the WHERE clause for each column named in the USING clause. Example: If the two tables to be joined are A and B and the USING clause names X, Y, and Z, then add this to the WHERE clause:    
+		//	Create extra terms on the WHERE clause for each column named in the USING clause. Example: If the two tables to be joined are A and B and the USING clause names X, Y, and Z, then add this to the WHERE clause:
 		//		A.X=B.X AND A.Y=B.Y AND A.Z=B.Z
 		//	Report an error if any column mentioned in the USING clause is not contained in both tables to be joined.
 		if pRight.pUsing {
@@ -379,7 +379,7 @@ func (pParse *Parse) pushOntoSorter(pOrderBy *ExprList, pSelect *Select, regData
 	} else {
 		v.AddOp2(OP_IdxInsert, pOrderBy.iECursor, regRecord)
 	}
-	
+
 	pParse.ReleaseTempReg(regRecord)
 	pParse.ReleaseTempRange(regBase, nExpr + 2)
 	if pSelect.iLimit != 0 {
@@ -513,7 +513,7 @@ static void selectInnerLoop(
     pDest.iMem = pParse.nMem+1;
     pDest.nMem = nResultCol;
     pParse.nMem += nResultCol;
-  }else{ 
+  }else{
     assert( pDest.nMem==nResultCol );
   }
   regResult = pDest.iMem;
@@ -767,7 +767,7 @@ static void explainTempTable(Parse *pParse, const char *zUsage){
 ** where iSub1 and iSub2 are the integers passed as the corresponding
 ** function parameters, and op is the text representation of the parameter
 ** of the same name. The parameter "op" must be one of TK_UNION, TK_EXCEPT,
-** TK_INTERSECT or TK_ALL. The first form is used if argument bUseTmp is 
+** TK_INTERSECT or TK_ALL. The first form is used if argument bUseTmp is
 ** false, or the second form if it is true.
 */
 static void explainComposite(
@@ -861,7 +861,7 @@ static void generateSortTail(
     }
     default: {
       int i;
-      assert( eDest==SRT_Output || eDest==SRT_Coroutine ); 
+      assert( eDest==SRT_Output || eDest==SRT_Coroutine );
       for(i=0; i<nColumn; i++){
         assert( regRow!=pDest.iMem+i );
         v.AddOp3(OP_Column, pseudoTab, i, pDest.iMem+i);
@@ -903,18 +903,18 @@ static void generateSortTail(
 ** original CREATE TABLE statement if the expression is a column. The
 ** declaration type for a ROWID field is INTEGER. Exactly when an expression
 ** is considered a column can be complex in the presence of subqueries. The
-** result-set expression in all of the following SELECT statements is 
+** result-set expression in all of the following SELECT statements is
 ** considered a column by this function.
 **
 **   SELECT col FROM tbl;
 **   SELECT (SELECT col FROM tbl;
 **   SELECT (SELECT col FROM tbl);
 **   SELECT abc FROM (SELECT col AS abc FROM tbl);
-** 
+**
 ** The declaration type for any expression other than a column is NULL.
 */
 static const char *columnType(
-  NameContext *pNC, 
+  NameContext *pNC,
   Expr *pExpr,
   const char **pzOriginDb,
   const char **pzOriginTab,
@@ -951,19 +951,19 @@ static const char *columnType(
       if( pTab==0 ){
         /* At one time, code such as "SELECT new.x" within a trigger would
         ** cause this condition to run.  Since then, we have restructured how
-        ** trigger code is generated and so this condition is no longer 
+        ** trigger code is generated and so this condition is no longer
         ** possible. However, it can still be true for statements like
         ** the following:
         **
         **   CREATE TABLE t1(col INTEGER);
         **   SELECT (SELECT t1.col) FROM FROM t1;
         **
-        ** when columnType() is called on the expression "t1.col" in the 
+        ** when columnType() is called on the expression "t1.col" in the
         ** sub-select. In this case, set the column type to NULL, even
         ** though it should really be "INTEGER".
         **
         ** This is not a problem, as the column type of "t1.col" is never
-        ** used. When columnType() is called on the expression 
+        ** used. When columnType() is called on the expression
         ** "(SELECT t1.col)", the correct type is returned (see the TK_SELECT
         ** branch below.  */
         break;
@@ -977,7 +977,7 @@ static const char *columnType(
         */
         if( iCol>=0 && iCol<pS.pEList.nExpr ){
           /* If iCol is less than zero, then the expression requests the
-          ** rowid of the sub-select or view. This expression is legal (see 
+          ** rowid of the sub-select or view. This expression is legal (see
           ** test case misc2.2.2) - it always evaluates to NULL.
           */
           NameContext sNC;
@@ -985,7 +985,7 @@ static const char *columnType(
           sNC.SrcList = pS.pSrc;
           sNC.Next = pNC;
           sNC.Parse = pNC.Parse;
-          zType = columnType(&sNC, p, &zOriginDb, &zOriginTab, &zOriginCol); 
+          zType = columnType(&sNC, p, &zOriginDb, &zOriginTab, &zOriginCol);
         }
       }else if( pTab.Schema ){
         /* A real table */
@@ -1019,11 +1019,11 @@ static const char *columnType(
       sNC.SrcList = pS.pSrc;
       sNC.Next = pNC;
       sNC.Parse = pNC.pParse;
-      zType = columnType(&sNC, p, &zOriginDb, &zOriginTab, &zOriginCol); 
+      zType = columnType(&sNC, p, &zOriginDb, &zOriginTab, &zOriginCol);
       break;
     }
   }
-  
+
   if( pzOriginDb ){
     assert( pzOriginTab && pzOriginCol );
     *pzOriginDb = zOriginDb;
@@ -1033,43 +1033,25 @@ static const char *columnType(
   return zType;
 }
 
-/*
-** Generate code that will tell the VDBE the declaration types of columns
-** in the result set.
-*/
-static void generateColumnTypes(
-  Parse *pParse,      /* Parser context */
-  SrcList *pTabList,  /* List of tables */
-  ExprList *pEList    /* Expressions defining the result set */
-){
-#ifndef SQLITE_OMIT_DECLTYPE
-  Vdbe *v = pParse.pVdbe;
-  int i;
-  NameContext sNC;
-  sNC.SrcList = pTabList;
-  sNC.Parse = pParse;
-  for(i=0; i<pEList.nExpr; i++){
-    Expr *p = pEList.a[i].Expr;
-    const char *zType;
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
-    const char *zOrigDb = 0;
-    const char *zOrigTab = 0;
-    const char *zOrigCol = 0;
-    zType = columnType(&sNC, p, &zOrigDb, &zOrigTab, &zOrigCol);
+//	Generate code that will tell the VDBE the declaration types of columns in the result set.
+func (pParse *Parse) generateColumnTypes(tables *SrcList, expressions *ExprList) {
+	v := pParse.pVdbe
+	sNC := &NameContext{ Parse: pParse, SrcList: tables }
+	for i := 0; i < expressions.nExpr; i++{
+		p := expressions.a[i].Expr
 
-    /* The vdbe must make its own copy of the column-type and other 
-    ** column specific strings, in case the schema is reset before this
-    ** virtual machine is deleted.
-    */
-    sqlite3VdbeSetColName(v, i, COLNAME_DATABASE, zOrigDb, SQLITE_TRANSIENT);
-    sqlite3VdbeSetColName(v, i, COLNAME_TABLE, zOrigTab, SQLITE_TRANSIENT);
-    sqlite3VdbeSetColName(v, i, COLNAME_COLUMN, zOrigCol, SQLITE_TRANSIENT);
-#else
-    zType = columnType(&sNC, p, 0, 0, 0);
-#endif
-    sqlite3VdbeSetColName(v, i, COLNAME_DECLTYPE, zType, SQLITE_TRANSIENT);
-  }
-#endif /* SQLITE_OMIT_DECLTYPE */
+		const char *zType;
+		const char *zOrigDb = 0;
+		const char *zOrigTab = 0;
+		const char *zOrigCol = 0;
+		zType := columnType(&sNC, p, &zOrigDb, &zOrigTab, &zOrigCol)
+
+		//	The vdbe must make its own copy of the column-type and other column specific strings, in case the schema is reset before this virtual machine is deleted.
+		sqlite3VdbeSetColName(v, i, COLNAME_DATABASE, zOrigDb, SQLITE_TRANSIENT)
+		sqlite3VdbeSetColName(v, i, COLNAME_TABLE, zOrigTab, SQLITE_TRANSIENT)
+		sqlite3VdbeSetColName(v, i, COLNAME_COLUMN, zOrigCol, SQLITE_TRANSIENT)
+		sqlite3VdbeSetColName(v, i, COLNAME_DECLTYPE, zType, SQLITE_TRANSIENT)
+	}
 }
 
 /*
@@ -1123,7 +1105,7 @@ static void generateColumnNames(
         zCol = pTab.Columns[iCol].Name;
       }
       if( !shortNames && !fullNames ){
-        sqlite3VdbeSetColName(v, i, COLNAME_NAME, 
+        sqlite3VdbeSetColName(v, i, COLNAME_NAME,
             sqlite3DbStrDup(db, pEList.a[i].zSpan), SQLITE_DYNAMIC);
       }else if( fullNames ){
         char *Name = 0;
@@ -1133,11 +1115,11 @@ static void generateColumnNames(
         sqlite3VdbeSetColName(v, i, COLNAME_NAME, zCol, SQLITE_TRANSIENT);
       }
     }else{
-      sqlite3VdbeSetColName(v, i, COLNAME_NAME, 
+      sqlite3VdbeSetColName(v, i, COLNAME_NAME,
           sqlite3DbStrDup(db, pEList.a[i].zSpan), SQLITE_DYNAMIC);
     }
   }
-  generateColumnTypes(pParse, pTabList, pEList);
+  pParse.generateColumnTypes(pTabList, pEList);
 }
 
 /*
@@ -1242,7 +1224,7 @@ static int selectColumnsFromExprList(
 /*
 ** Add type and collation information to a column list based on
 ** a SELECT statement.
-** 
+**
 ** The column list presumably came from selectColumnNamesFromExprList().
 ** The column list has only names, not types or collations.  This
 ** routine goes through and adds the types and collations.
@@ -1339,9 +1321,9 @@ func (p *Parse) GetVdbe() (v *Vdbe) {
 ** Compute the iLimit and iOffset fields of the SELECT based on the
 ** pLimit and pOffset expressions.  pLimit and pOffset hold the expressions
 ** that appear in the original SQL statement after the LIMIT and OFFSET
-** keywords.  Or NULL if those keywords are omitted. iLimit and iOffset 
-** are the integer memory register numbers for counters used to compute 
-** the limit and offset.  If there is no limit and/or offset, then 
+** keywords.  Or NULL if those keywords are omitted. iLimit and iOffset
+** are the integer memory register numbers for counters used to compute
+** the limit and offset.  If there is no limit and/or offset, then
 ** iLimit and iOffset are negative.
 **
 ** This routine changes the values of iLimit and iOffset only if
@@ -1360,7 +1342,7 @@ static void computeLimitRegisters(Parse *pParse, Select *p, int iBreak){
   int addr1, n;
   if( p.iLimit ) return;
 
-  /* 
+  /*
   ** "LIMIT -1" always shows all rows.  There is some
   ** contraversy about what the correct behavior should be.
   ** The current implementation interprets "LIMIT 0" to mean
@@ -1441,7 +1423,7 @@ static int multiSelectOrderBy(
 **
 ** "p" points to the right-most of the two queries.  the query on the
 ** left is p.pPrior.  The left query could also be a compound query
-** in which case this routine will be called recursively. 
+** in which case this routine will be called recursively.
 **
 ** The results of the total query are to be written into a destination
 ** of type eDest with parameter iParm.
@@ -1563,7 +1545,7 @@ static int multiSelect(
       p.nSelectRow += pPrior.nSelectRow;
       if( pPrior.pLimit
        && sqlite3ExprIsInteger(pPrior.pLimit, &nLimit)
-       && p.nSelectRow > (double)nLimit 
+       && p.nSelectRow > (double)nLimit
       ){
         p.nSelectRow = (double)nLimit;
       }
@@ -1749,7 +1731,7 @@ static int multiSelect(
 
   explainComposite(pParse, p.op, iSub1, iSub2, p.op!=TK_ALL);
 
-  /* Compute collating sequences used by 
+  /* Compute collating sequences used by
   ** temporary tables needed to implement the compound select.
   ** Attach the KeyInfo structure to all temporary tables.
   **
@@ -1846,7 +1828,7 @@ static int generateOutputSubroutine(
   addr = v.CurrentAddr()
   iContinue = v.MakeLabel()
 
-  /* Suppress duplicates for UNION, EXCEPT, and INTERSECT 
+  /* Suppress duplicates for UNION, EXCEPT, and INTERSECT
   */
   if( regPrev ){
     int j1, j2;
@@ -1887,7 +1869,7 @@ static int generateOutputSubroutine(
     case SRT_Set: {
       int r1;
       assert( pIn.nMem==1 );
-      p.affinity = 
+      p.affinity =
          sqlite3CompareAffinity(p.pEList.a[0].Expr, pDest.affinity);
       r1 = pParse.GetTempReg()
       sqlite3VdbeAddOp4(v, OP_MakeRecord, pIn.iMem, 1, r1, &p.affinity, 1);
@@ -1925,7 +1907,7 @@ static int generateOutputSubroutine(
     ** SRT_Output.  This routine is never called with any other
     ** destination other than the ones handled above or SRT_Output.
     **
-    ** For SRT_Output, results are stored in a sequence of registers.  
+    ** For SRT_Output, results are stored in a sequence of registers.
     ** Then the OP_ResultRow opcode is used to cause sqlite3_step() to
     ** return the next row of result.
     */
@@ -1983,7 +1965,7 @@ static int generateOutputSubroutine(
 **
 **    EofB:    Called when data is exhausted from selectB.
 **
-** The implementation of the latter five subroutines depend on which 
+** The implementation of the latter five subroutines depend on which
 ** <operator> is used:
 **
 **
@@ -2092,7 +2074,7 @@ static int multiSelectOrderBy(
 
   /* Patch up the ORDER BY clause
   */
-  op = p.op;  
+  op = p.op;
   pPrior = p.pPrior;
   assert( pPrior.pOrderBy==0 );
   pOrderBy = p.pOrderBy;
@@ -2187,7 +2169,7 @@ static int multiSelectOrderBy(
       }
     }
   }
- 
+
 	//	Separate the left and the right query from one another
 	p.pPrior = nil
 	pParse.ResolveOrderGroupBy(p, p.pOrderBy, "ORDER")
@@ -2237,7 +2219,7 @@ static int multiSelectOrderBy(
   v.AddOp1(OP_Yield, regAddrA);
   v.NoopComment("End coroutine for left SELECT")
 
-  /* Generate a coroutine to evaluate the SELECT statement on 
+  /* Generate a coroutine to evaluate the SELECT statement on
   ** the right - the "B" select
   */
   addrSelectB = v.CurrentAddr()
@@ -2245,7 +2227,7 @@ static int multiSelectOrderBy(
   savedLimit = p.iLimit;
   savedOffset = p.iOffset;
   p.iLimit = regLimitB;
-  p.iOffset = 0;  
+  p.iOffset = 0;
   explainSetInteger(iSub2, pParse.iNextSelectId);
   sqlite3Select(pParse, p, &destB);
   p.iLimit = savedLimit;
@@ -2261,7 +2243,7 @@ static int multiSelectOrderBy(
   addrOutA = generateOutputSubroutine(pParse,
                  p, &destA, pDest, regOutA,
                  regPrev, pKeyDup, P4_KEYINFO_HANDOFF, labelEnd);
-  
+
   /* Generate a subroutine that outputs the current row of the B
   ** select as the next output row of the compound select.
   */
@@ -2278,7 +2260,7 @@ static int multiSelectOrderBy(
   v.NoopComment("eof-A subroutine")
   if( op==TK_EXCEPT || op==TK_INTERSECT ){
     addrEofA = v.AddOp2(OP_Goto, 0, labelEnd);
-  }else{  
+  }else{
     addrEofA = v.AddOp2(OP_If, regEofB, labelEnd);
     v.AddOp2(OP_Gosub, regOutB, addrOutB);
     v.AddOp1(OP_Yield, regAddrB);
@@ -2292,7 +2274,7 @@ static int multiSelectOrderBy(
   if( op==TK_INTERSECT ){
     addrEofB = addrEofA;
     if( p.nSelectRow > pPrior.nSelectRow ) p.nSelectRow = pPrior.nSelectRow;
-  }else{  
+  }else{
     v.NoopComment("eof-B subroutine")
     addrEofB = v.AddOp2(OP_If, regEofA, labelEnd);
     v.AddOp2(OP_Gosub, regOutA, addrOutA);
@@ -2386,13 +2368,13 @@ static int multiSelectOrderBy(
 /*
 ** Scan through the expression pExpr.  Replace every reference to
 ** a column in table number iTable with a copy of the iColumn-th
-** entry in pEList.  (But leave references to the ROWID column 
+** entry in pEList.  (But leave references to the ROWID column
 ** unchanged.)
 **
 ** This routine is part of the flattening procedure.  A subquery
 ** whose result set is defined by pEList appears as entry in the
 ** FROM clause of a SELECT such that the VDBE cursor assigned to that
-** FORM clause entry is iTable.  This routine make the necessary 
+** FORM clause entry is iTable.  This routine make the necessary
 ** changes to pExpr so that it refers directly to the source table
 ** of the subquery rather the result set of the subquery.
 */
@@ -2487,7 +2469,7 @@ static void substSelect(
 **     SELECT x+y AS a FROM t1 WHERE z<100 AND a>5
 **
 ** The code generated for this simpification gives the same result
-** but only has to scan the data once.  And because indices might 
+** but only has to scan the data once.  And because indices might
 ** exist on the table t1, a complete scan of the data might be
 ** avoided.
 **
@@ -2503,7 +2485,7 @@ static void substSelect(
 **   (4)  The subquery is not DISTINCT.
 **
 **  (**)  At one point restrictions (4) and (5) defined a subset of DISTINCT
-**        sub-queries that were excluded from this optimization. Restriction 
+**        sub-queries that were excluded from this optimization. Restriction
 **        (4) has since been expanded to exclude all DISTINCT subqueries.
 **
 **   (6)  The subquery does not use aggregates or the outer query is not
@@ -2537,10 +2519,10 @@ static void substSelect(
 **
 **  (16)  The outer query is not an aggregate or the subquery does
 **        not contain ORDER BY.  (Ticket #2942)  This used to not matter
-**        until we introduced the group_concat() function.  
+**        until we introduced the group_concat() function.
 **
-**  (17)  The sub-query is not a compound select, or it is a UNION ALL 
-**        compound clause made up entirely of non-aggregate queries, and 
+**  (17)  The sub-query is not a compound select, or it is a UNION ALL
+**        compound clause made up entirely of non-aggregate queries, and
 **        the parent query:
 **
 **          * is not itself part of a compound select,
@@ -2555,7 +2537,7 @@ static void substSelect(
 **        restriction (4).
 **
 **  (18)  If the sub-query is a compound select, then all terms of the
-**        ORDER by clause of the parent must be simple references to 
+**        ORDER by clause of the parent must be simple references to
 **        columns of the sub-query.
 **
 **  (19)  The subquery does not use LIMIT or the outer query does not
@@ -2642,7 +2624,7 @@ static int flattenSubquery(
   }
 
   /* OBSOLETE COMMENT 1:
-  ** Restriction 3:  If the subquery is a join, make sure the subquery is 
+  ** Restriction 3:  If the subquery is a join, make sure the subquery is
   ** not used as the right operand of an outer join.  Examples of why this
   ** is not allowed:
   **
@@ -2692,7 +2674,7 @@ static int flattenSubquery(
     for(pSub1=pSub; pSub1; pSub1=pSub1.pPrior){
       assert( pSub.pSrc!=0 );
       if( (pSub1.selFlags & (SF_Distinct|SF_Aggregate))!=0
-       || (pSub1.pPrior && pSub1.op!=TK_ALL) 
+       || (pSub1.pPrior && pSub1.op!=TK_ALL)
        || pSub1.pSrc.nSrc<1
       ){
         return 0;
@@ -2716,13 +2698,13 @@ static int flattenSubquery(
   pParse.zAuthContext = zSavedAuthContext;
 
   /* If the sub-query is a compound SELECT statement, then (by restrictions
-  ** 17 and 18 above) it must be a UNION ALL and the parent query must 
+  ** 17 and 18 above) it must be a UNION ALL and the parent query must
   ** be of the form:
   **
-  **     SELECT <expr-list> FROM (<sub-query>) <where-clause> 
+  **     SELECT <expr-list> FROM (<sub-query>) <where-clause>
   **
   ** followed by any ORDER BY, LIMIT and/or OFFSET clauses. This block
-  ** creates N-1 copies of the parent query without any ORDER BY, LIMIT or 
+  ** creates N-1 copies of the parent query without any ORDER BY, LIMIT or
   ** OFFSET clauses and joins them to the left-hand-side of the original
   ** using UNION ALL operators. In this case N is the number of simple
   ** select statements in the compound sub-query.
@@ -2773,7 +2755,7 @@ static int flattenSubquery(
     if( db.mallocFailed ) return 1;
   }
 
-  /* Begin flattening the iFrom-th entry of the FROM clause 
+  /* Begin flattening the iFrom-th entry of the FROM clause
   ** in the outer query.
   */
   pSub = pSub1 = pSubitem.Select;
@@ -2868,10 +2850,10 @@ static int flattenSubquery(
       memset(&pSubSrc.a[i], 0, sizeof(pSubSrc.a[i]));
     }
     pSrc.a[iFrom].jointype = jointype;
-  
-    /* Now begin substituting subquery result set expressions for 
+
+    /* Now begin substituting subquery result set expressions for
     ** references to the iParent in the outer query.
-    ** 
+    **
     ** Example:
     **
     **   SELECT a+5, b*10 FROM (SELECT x*3 AS a, y+10 AS b FROM t1) WHERE a>b;
@@ -2919,12 +2901,12 @@ static int flattenSubquery(
       pParent.Where = substExpr(db, pParent.Where, iParent, pSub.pEList);
       pParent.Where = db.ExprAnd(pParent.Where, pWhere)
     }
-  
+
     /* The flattened query is distinct if either the inner or the
-    ** outer query is distinct. 
+    ** outer query is distinct.
     */
     pParent.selFlags |= pSub.selFlags & SF_Distinct;
-  
+
     /*
     ** SELECT ... FROM (SELECT ... LIMIT a OFFSET b) LIMIT x OFFSET y;
     **
@@ -2947,7 +2929,7 @@ static int flattenSubquery(
 
 /*
 ** Analyze the SELECT statement passed as an argument to see if it
-** is a min() or max() query. Return WHERE_ORDERBY_MIN or WHERE_ORDERBY_MAX if 
+** is a min() or max() query. Return WHERE_ORDERBY_MIN or WHERE_ORDERBY_MAX if
 ** it is, or 0 otherwise. At present, a query is considered to be
 ** a min()/max() query if:
 **
@@ -2978,7 +2960,7 @@ static byte minMaxQuery(Select *p){
 
 /*
 ** The select statement passed as the first argument is an aggregate query.
-** The second argment is the associated aggregate-info object. This 
+** The second argment is the associated aggregate-info object. This
 ** function tests if the SELECT is of the form:
 **
 **   SELECT count(*) FROM <tbl>
@@ -2993,7 +2975,7 @@ static Table *isSimpleCount(Select *p, AggInfo *pAggInfo){
 
   assert( !p.pGroupBy );
 
-  if( p.Where || p.pEList.nExpr!=1 
+  if( p.Where || p.pEList.nExpr!=1
    || p.pSrc.nSrc!=1 || p.pSrc.a[0].Select
   ){
     return 0;
@@ -3035,7 +3017,7 @@ func (pParse *Parse) IndexedByLookup(pFrom *SrcList_item) int {
 **    (1)  Make sure VDBE cursor numbers have been assigned to every
 **         element of the FROM clause.
 **
-**    (2)  Fill in the pTabList.a[].pTab fields in the SrcList that 
+**    (2)  Fill in the pTabList.a[].pTab fields in the SrcList that
 **         defines FROM clause.  When views appear in the FROM clause,
 **         fill pTabList.a[].Select with a copy of the SELECT statement
 **         that implements the view.  A copy is made of the view's SELECT
@@ -3216,7 +3198,7 @@ static int selectExpander(Walker *pWalker, Select *p){
               if( (pFrom.jointype & JT_NATURAL)!=0
                 && tableAndColumnIndex(pTabList, i, Name, 0, 0)
               ){
-                /* In a NATURAL join, omit the join columns from the 
+                /* In a NATURAL join, omit the join columns from the
                 ** table to the right of the join */
                 continue;
               }
@@ -3265,8 +3247,8 @@ static int selectExpander(Walker *pWalker, Select *p){
 **
 ** When this routine is the Walker.xExprCallback then expression trees
 ** are walked without any actions being taken at each node.  Presumably,
-** when this routine is used for Walker.xExprCallback then 
-** Walker.xSelectCallback is set to do something useful for every 
+** when this routine is used for Walker.xExprCallback then
+** Walker.xSelectCallback is set to do something useful for every
 ** subquery in the parser tree.
 */
 static int exprWalkNoop(Walker *NotUsed, Expr *NotUsed2){
@@ -3486,7 +3468,7 @@ static void updateAccumulator(Parse *pParse, AggInfo *pAggInfo){
   }
 
   /* Before populating the accumulator registers, clear the column cache.
-  ** Otherwise, if any of the required column values are already present 
+  ** Otherwise, if any of the required column values are already present
   ** in registers, sqlite3ExprCode() may use OP_SCopy to copy the value
   ** to pC.iMem. But by the time the value is used, the original register
   ** may have been used, invalidating the underlying buffer holding the
@@ -3531,7 +3513,7 @@ static void explainSimpleCount(
 #endif
 
 /*
-** Generate code for the SELECT statement given in the p argument.  
+** Generate code for the SELECT statement given in the p argument.
 **
 ** The results are distributed in various ways depending on the
 ** contents of the SelectDest structure pointed to by argument pDest
@@ -3548,7 +3530,7 @@ static void explainSimpleCount(
 **                     of the query.  This destination implies "LIMIT 1".
 **
 **     SRT_Set         The result must be a single column.  Store each
-**                     row of result as the key in table pDest.iParm. 
+**                     row of result as the key in table pDest.iParm.
 **                     Apply the affinity pDest.affinity before storing
 **                     results.  Used to implement "IN (SELECT ...)".
 **
@@ -3734,7 +3716,7 @@ static void explainSimpleCount(
   ** an optimization - the correct answer should result regardless.
   */
 
-  /* If the query is DISTINCT with an ORDER BY but is not an aggregate, and 
+  /* If the query is DISTINCT with an ORDER BY but is not an aggregate, and
   ** if the select-list is the same as the ORDER BY list, then this query
   ** can be rewritten as a GROUP BY. In other words, this:
   **
@@ -3744,12 +3726,12 @@ static void explainSimpleCount(
   **
   **     SELECT xyz FROM ... GROUP BY xyz
   **
-  ** The second form is preferred as a single index (or temp-table) may be 
-  ** used for both the ORDER BY and DISTINCT processing. As originally 
-  ** written the query must use a temp-table for at least one of the ORDER 
+  ** The second form is preferred as a single index (or temp-table) may be
+  ** used for both the ORDER BY and DISTINCT processing. As originally
+  ** written the query must use a temp-table for at least one of the ORDER
   ** BY and DISTINCT, and an index or separate temp-table for the other.
   */
-  if( (p.selFlags & (SF_Distinct|SF_Aggregate))==SF_Distinct 
+  if( (p.selFlags & (SF_Distinct|SF_Aggregate))==SF_Distinct
    && sqlite3ExprListCompare(pOrderBy, p.pEList)==0
   ){
     p.selFlags &= ~SF_Distinct;
@@ -3759,7 +3741,7 @@ static void explainSimpleCount(
   }
 
   /* If there is an ORDER BY clause, then this sorting
-  ** index might end up being unused if the data can be 
+  ** index might end up being unused if the data can be
   ** extracted in pre-sorted order.  If that is the case, then the
   ** OP_OpenEphemeral instruction will be changed to an OP_Noop once
   ** we figure out that the sorting index is not needed.  The addrSortIndex
@@ -3815,7 +3797,7 @@ static void explainSimpleCount(
     if( pWInfo==0 ) goto select_end;
     if( pWInfo.nRowOut < p.nSelectRow ) p.nSelectRow = pWInfo.nRowOut;
 
-    /* If sorting index that was created by a prior OP_OpenEphemeral 
+    /* If sorting index that was created by a prior OP_OpenEphemeral
     ** instruction ended up not being needed, then change the OP_OpenEphemeral
     ** into an OP_Noop.
     */
@@ -3826,13 +3808,13 @@ static void explainSimpleCount(
 
     if( pWInfo.eDistinct ){
       VdbeOp *pOp;                /* No longer required OpenEphemeral instr. */
-     
+
       assert( addrDistinctIndex>=0 );
       pOp = sqlite3VdbeGetOp(v, addrDistinctIndex);
 
       assert( isDistinct );
-      assert( pWInfo.eDistinct==WHERE_DISTINCT_ORDERED 
-           || pWInfo.eDistinct==WHERE_DISTINCT_UNIQUE 
+      assert( pWInfo.eDistinct==WHERE_DISTINCT_ORDERED
+           || pWInfo.eDistinct==WHERE_DISTINCT_UNIQUE
       );
       distinct = -1;
       if( pWInfo.eDistinct==WHERE_DISTINCT_ORDERED ){
@@ -3907,7 +3889,7 @@ static void explainSimpleCount(
       p.nSelectRow = (double)1;
     }
 
- 
+
     /* Create a label to jump to when we want to abort the query */
     addrEnd = v.MakeLabel()
 
@@ -3952,12 +3934,12 @@ static void explainSimpleCount(
       /* If there is a GROUP BY clause we might need a sorting index to
       ** implement it.  Allocate that sorting index now.  If it turns out
       ** that we do not need it after all, the OP_SorterOpen instruction
-      ** will be converted into a Noop.  
+      ** will be converted into a Noop.
       */
       sAggInfo.sortingIdx = pParse.nTab++;
       pKeyInfo = keyInfoFromExprList(pParse, pGroupBy);
-      addrSortingIdx = sqlite3VdbeAddOp4(v, OP_SorterOpen, 
-          sAggInfo.sortingIdx, sAggInfo.nSortingColumn, 
+      addrSortingIdx = sqlite3VdbeAddOp4(v, OP_SorterOpen,
+          sAggInfo.sortingIdx, sAggInfo.nSortingColumn,
           0, (char*)pKeyInfo, P4_KEYINFO_HANDOFF);
 
       /* Initialize memory locations used by GROUP BY aggregate processing
@@ -4004,7 +3986,7 @@ static void explainSimpleCount(
         int nCol;
         int nGroupBy;
 
-        explainTempTable(pParse, 
+        explainTempTable(pParse,
             isDistinct && !(p.selFlags&SF_Distinct)?"DISTINCT":"GROUP BY");
 
         groupBySort = 1;
@@ -4148,7 +4130,7 @@ static void explainSimpleCount(
       v.ResolveLabel(addrReset)
       resetAccumulator(pParse, &sAggInfo);
       v.AddOp1(OP_Return, regReset);
-     
+
     } /* endif pGroupBy.  Begin aggregate queries without GROUP BY: */
     else {
       ExprList *pDel = 0;
@@ -4187,7 +4169,7 @@ static void explainSimpleCount(
         **
         ** (2011-04-15) Do not do a full scan of an unordered index.
         **
-        ** In practice the KeyInfo structure will not be used. It is only 
+        ** In practice the KeyInfo structure will not be used. It is only
         ** passed to keep OP_OpenRead happy.
         */
 		for _, index := range pTab.Indices {
@@ -4215,11 +4197,11 @@ static void explainSimpleCount(
         **   SELECT max(x) FROM ...
         **
         ** If it is, then ask the code in where.c to attempt to sort results
-        ** as if there was an "ORDER ON x" or "ORDER ON x DESC" clause. 
+        ** as if there was an "ORDER ON x" or "ORDER ON x DESC" clause.
         ** If where.c is able to produce results sorted in this order, then
-        ** add vdbe code to break out of the processing loop after the 
-        ** first iteration (since the first iteration of the loop is 
-        ** guaranteed to operate on the row with the minimum or maximum 
+        ** add vdbe code to break out of the processing loop after the
+        ** first iteration (since the first iteration of the loop is
+        ** guaranteed to operate on the row with the minimum or maximum
         ** value of x, the only row required).
         **
         ** A special flag must be passed to WhereBegin() to slightly
@@ -4230,7 +4212,7 @@ static void explainSimpleCount(
         **     for x.
         **
         **   + The optimizer code in where.c (the thing that decides which
-        **     index or indices to use) should place a different priority on 
+        **     index or indices to use) should place a different priority on
         **     satisfying the 'ORDER BY' clause than it does in other cases.
         **     Refer to code and comments in where.c for details.
         */
@@ -4245,7 +4227,7 @@ static void explainSimpleCount(
             pMinMax.a[0].Expr.op = TK_COLUMN;
           }
         }
-  
+
         /* This case runs if the aggregate has no GROUP BY clause.  The
         ** processing is much simpler since there is only a single row
         ** of output.
@@ -4275,7 +4257,7 @@ static void explainSimpleCount(
       db.ExprListDelete(pDel);
     }
     v.ResolveLabel(addrEnd)
-    
+
   } /* endif aggregate query */
 
   if( distinct>=0 ){

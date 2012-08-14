@@ -19,6 +19,11 @@ func (p *CellInfo) Parse(page *MemoryPage, cell int) {
 	p.ParsePtr(page, page.FindCell(cell))
 }
 
+func ParsePtr(page *MemoryPage, cell Buffer) (info *CellInfo) {
+	info = new(CellInfo)
+	info.ParsePtr(page, cell)
+}
+
 func (p *CellInfo) ParsePtr(page *MemoryPage, cell Buffer) {
 	var payload		uint32			//	Number of bytes of cell payload
 	var buf			Buffer

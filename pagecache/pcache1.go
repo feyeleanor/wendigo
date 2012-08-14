@@ -93,8 +93,8 @@ void sqlite3PCacheBufferSetup(void *pBuf, int sz, int n){
 
 /*
 ** Malloc function used within this file to allocate space from the buffer
-** configured using sqlite3_config(SQLITE_CONFIG_PAGECACHE) option. If no 
-** such buffer exists or there is no space left in it, this function falls 
+** configured using sqlite3_config(SQLITE_CONFIG_PAGECACHE) option. If no
+** such buffer exists or there is no space left in it, this function falls
 ** back to sqlite3Malloc().
 **
 ** Multiple threads can run this routine at the same time.  Global variables
@@ -157,7 +157,6 @@ static int pcache1Free(void *p){
   return nFreed;
 }
 
-#ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
 //	Return the size of a pcache allocation
 func pcache1MemSize(p *void) (size int) {
 	if p >= pcache1.pStart && p < pcache1.pEnd {
@@ -167,7 +166,6 @@ func pcache1MemSize(p *void) (size int) {
 		return size;
 	}
 }
-#endif /* SQLITE_ENABLE_MEMORY_MANAGEMENT */
 
 //	Allocate a new page object initially associated with cache pCache.
 static PgHdr1 *pcache1AllocPage(cache *PCache1) {
@@ -225,11 +223,11 @@ void sqlite3PageFree(void *p) {
 //	Return true if it desirable to avoid allocating a new page cache entry.
 //	If memory was allocated specifically to the page cache using SQLITE_CONFIG_PAGECACHE but that memory has all been used, then it is desirable to avoid allocating a new page cache entry because presumably SQLITE_CONFIG_PAGECACHE was suppose to be sufficient for all page cache needs and we should not need to spill the allocation onto the heap.
 //	Or, the heap is used for all page cache memory but the heap is under memory pressure, then again it is desirable to avoid allocating a new page cache entry in order to avoid stressing the heap even further.
-static int pcache1UnderMemoryPressure(cache *PCache1) {
+func (cache *PCache1) IsUnderMemoryPressure() bool {
 	if pcache1.nSlot && (cache.PageSize + cache.ExtraBytes) <= pcache1.szSlot {
 		return pcache1.bUnderPressure
 	} else {
-		return sqlite3HeapNearlyFull()
+		return IsHeapNearlyFull()
 	}
 }
 
@@ -306,8 +304,8 @@ static void pcache1RemoveFromHash(page *PgHdr1) {
 }
 
 /*
-** Discard all pages from cache pCache with a page number (key value) 
-** greater than or equal to iLimit. Any pinned pages that meet this 
+** Discard all pages from cache pCache with a page number (key value)
+** greater than or equal to iLimit. Any pinned pages that meet this
 ** criteria are unpinned before they are discarded.
 **
 ** The PCache mutex must be held when this function is called.
@@ -318,7 +316,7 @@ static void pcache1TruncateUnsafe(
 ){
   uint h;
   for(h=0; h<pCache.nHash; h++){
-    PgHdr1 **pp = &pCache.apHash[h]; 
+    PgHdr1 **pp = &pCache.apHash[h];
     PgHdr1 *pPage;
     while( (pPage = *pp)!=0 ){
       if( pPage.iKey>=iLimit ){
@@ -356,34 +354,11 @@ static void pcache1Shutdown(void *NotUsed){
 //	Implementation of the sqlite3_pcache.xCreate method.
 //	Allocate a new cache.
 static sqlite3_pcache *pcache1Create(int PageSize, int ExtraBytes, int Purgeable) {
-	group		*Group
-
-	//	The seperateCache variable is true if each PCache has its own private Group. In other words, separateCache is true for mode (1) where no mutexing is required.
-	//
-	//		*  Always use a unified cache (mode-2) if ENABLE_MEMORY_MANAGEMENT
-	//		*  Always use a unified cache in single-threaded applications
-	//		*  Otherwise (if multi-threaded and ENABLE_MEMORY_MANAGEMENT is off) use separate caches (mode-1)
-
-#if defined(SQLITE_ENABLE_MEMORY_MANAGEMENT)
-	const int separateCache = 0
-#else
-	int separateCache = sqlite3GlobalConfig.bCoreMutex > 0
-#endif
-
 	assert( (PageSize & (PageSize - 1)) == 0 && PageSize >= 512 && PageSize <= 65536 )
 	assert( ExtraBytes < 300 )
 
-	sz := sizeof(PCache1) + sizeof(Group) * separateCache
-	cache := (PCache1 *)(sqlite3_malloc(sz))
-	if cache != nil {
-		memset(cache, 0, sz)
-		if separateCache {
-			group = (Group*)(&cache[1])
-			group.Pinned = 10
-		} else {
-			group = &pcache1.grp
-		}
-		cache.Group = group
+	if cache = new(PCache1); cache != nil {
+		cache.Group = &pcache1.grp
 		cache.PageSize = PageSize
 		cache.ExtraBytes = ExtraBytes
 		cache.Purgeable = Purgeable
@@ -414,7 +389,7 @@ static void pcache1Cachesize(sqlite3_pcache *p, int nMax) {
 	}
 }
 
-//	Implementation of the sqlite3_pcache.xShrink method. 
+//	Implementation of the sqlite3_pcache.xShrink method.
 //	Free up as much memory as possible.
 static void pcache1Shrink(sqlite3_pcache *p) {
 	cache := (PCache1*)(p)
@@ -438,7 +413,7 @@ static int pcache1Pagecount(sqlite3_pcache *p) {
 	return n
 }
 
-//	Implementation of the sqlite3_pcache.xFetch method. 
+//	Implementation of the sqlite3_pcache.xFetch method.
 //	Fetch a page by key value.
 //
 //	Whether or not a new page may be allocated by this function depends on the value of the createFlag argument. 0 means do not allocate a new page. 1 means allocate a new page if space is easily available. 2 means to try really hard to allocate a new page.
@@ -464,12 +439,12 @@ static int pcache1Pagecount(sqlite3_pcache *p) {
 //
 //			(c) The system is under memory pressure and wants to avoid unnecessary pages cache entry allocations
 //
-//		then attempt to recycle a page from the LRU list. If it is the right size, return the recycled buffer. Otherwise, free the buffer and proceed to step 5. 
+//		then attempt to recycle a page from the LRU list. If it is the right size, return the recycled buffer. Otherwise, free the buffer and proceed to step 5.
 //
 //		5. Otherwise, allocate and return a new page buffer.
 static sqlite3_pcache_page *pcache1Fetch(
-  sqlite3_pcache *p, 
-  uint iKey, 
+  sqlite3_pcache *p,
+  uint iKey,
   createFlag bool
 ){
 	page 		*PgHdr1
@@ -500,7 +475,7 @@ static sqlite3_pcache_page *pcache1Fetch(
 	pinned := cache.nPage - cache.nRecyclable
 	assert( group.Pinned == group.MaxPage + 10 - group.MinPage )
 	assert( cache.n90pct == cache.nMax * 9 / 10 )
-	if createFlag && (pinned >= group.Pinned || pinned >= cache.n90pct || pcache1UnderMemoryPressure(cache)) {
+	if createFlag && (pinned >= group.Pinned || pinned >= cache.n90pct || cache.IsUnderMemoryPressure()) {
 		goto fetch_out
 	}
 
@@ -509,7 +484,7 @@ static sqlite3_pcache_page *pcache1Fetch(
 	}
 
 	 //	Step 4. Try to recycle a page. */
-	if( cache.Purgeable && group.LruTail && ((cache.nPage + 1 >= cache.nMax) || group.CurrentPage >= group.MaxPage || pcache1UnderMemoryPressure(cache))) {
+	if( cache.Purgeable && group.LruTail && ((cache.nPage + 1 >= cache.nMax) || group.CurrentPage >= group.MaxPage || cache.IsUnderMemoryPressure())) {
 		page = group.LruTail
 		pcache1RemoveFromHash(page)
 		pcache1PinPage(page)
@@ -529,7 +504,7 @@ static sqlite3_pcache_page *pcache1Fetch(
 		}
 	}
 
-	//	Step 5. If a usable page buffer has still not been found, attempt to allocate a new one. 
+	//	Step 5. If a usable page buffer has still not been found, attempt to allocate a new one.
 	if page == nil {
 		if createFlag {}
 		page = pcache1AllocPage(cache)
@@ -561,14 +536,14 @@ fetch_out:
 //
 //	Mark a page as unpinned (eligible for asynchronous recycling).
 static void pcache1Unpin(
-  sqlite3_pcache *p, 
-  sqlite3_pcache_page *pPg, 
+  sqlite3_pcache *p,
+  sqlite3_pcache_page *pPg,
   int reuseUnlikely
 ){
 	cache := (PCache1 *)(p)
 	page := (PgHdr1 *)(pPg)
 	group := cache.Group;
- 
+
 	assert( page.pCache == cache )
 	group.mutex.Lock()
 
@@ -638,7 +613,7 @@ static void pcache1Truncate(sqlite3_pcache *p, uint iLimit){
 	cache.Group.mutex.Unlock()
 }
 
-//	Implementation of the sqlite3_pcache.xDestroy method. 
+//	Implementation of the sqlite3_pcache.xDestroy method.
 //	Destroy a cache allocated using pcache1Create().
 static void pcache1Destroy(sqlite3_pcache *p){
 	cache := (PCache1 *)(p)
@@ -677,13 +652,12 @@ void sqlite3PCacheSetDefault(void){
   sqlite3_config(SQLITE_CONFIG_PCACHE2, &defaultMethods);
 }
 
-#ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
 //	This function is called to free superfluous dynamically allocated memory held by the pager system.
 //	nReq is the number of bytes of memory required. Once this much has been released, the function returns. The return value is the total number of bytes of memory released.
 
 func sqlite3PcacheReleaseMemory(nReq int) int {
 	int	nFree = 0
-	if pcache1.pStart == nil {
+	if nFree := 0; pcache1.pStart == nil {
 		&pcache1.grp.mutex.CriticalSection(func() {
 			for p := pcache1.grp.LruTail; (nReq < 0 || nFree < nReq) && (pcache1.grp.LruTail != nil); p = pcache1.grp.LruTail {
 				nFree += pcache1MemSize(p.page.pBuf)
@@ -698,4 +672,3 @@ func sqlite3PcacheReleaseMemory(nReq int) int {
 	}
 	return nFree
 }
-#endif /* SQLITE_ENABLE_MEMORY_MANAGEMENT */

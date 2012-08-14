@@ -112,7 +112,7 @@ func (pParse *Parse) AuthRead(pExpr *Expr, schema *Schema, pTabList *SrcList) {
 //	Do an authorization check using the code and arguments given. Return either SQLITE_OK (zero) or SQLITE_IGNORE or SQLITE_DENY. If SQLITE_DENY is returned, then the error count and error message in pParse are modified appropriately.
 func (pParse *Parse) AuthCheck(code int, args... string) (rc int) {
 	db := pParse.db
-	//	Don't do any authorization checks if the database is initialising or if the parser is being invoked from within sqlite3_declare_vtab.
+	//	Don't do any authorization checks if the database is initialising or if the parser is being invoked from within DeclareVTab.
 	if db.init.busy || IN_DECLARE_VTAB || db.xAuth == nil {
 		return SQLITE_OK
 	}

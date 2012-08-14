@@ -135,7 +135,7 @@ func (db *sqlite3) InitOne(iDb int, ErrMsg string) (rc int) {
 	openedTransaction := false
 	pDb.pBt.Lock()
 	if !sqlite3BtreeIsInReadTrans(pDb.pBt) {
-		if rc = sqlite3BtreeBeginTrans(pDb.pBt, 0); rc != SQLITE_OK {
+		if rc = pDb.pBt.BeginTransaction(0); rc != SQLITE_OK {
 			ErrMsg = fmt.Sprintf("%v", sqlite3ErrStr(rc))
 			goto initone_error_out
 		}
@@ -301,7 +301,7 @@ func (pParse *Parse) schemaIsValid() (rc int) {
 		if pBt := database.pBt; pBt != nil {			//	Btree database to read cookie from
 			//	If there is not already a read-only (or read-write) transaction opened on the b-tree database, open one now. If a transaction is opened, it will be closed immediately after reading the meta-value.
 			if !sqlite3BtreeIsInReadTrans(pBt) {
-				rc = sqlite3BtreeBeginTrans(pBt, 0)
+				rc = pBt.BeginTransaction(0)
 				if rc == SQLITE_NOMEM || rc == SQLITE_IOERR_NOMEM {
 					db.mallocFailed = true
 				}
@@ -369,7 +369,7 @@ static int sqlite3Prepare(
 
 	//	Check to verify that it is possible to get a read lock on all database schemas. The inability to get a read lock indicates that some other database connection is holding a write-lock, which in turn means that the other connection has made uncommitted changes to the schema.
 	//	Were we to proceed and prepare the statement against the uncommitted schema changes and if those schema changes are subsequently rolled back and different changes are made in their place, then when this prepared statement goes to run the schema cookie would fail to detect the schema change. Disaster would follow.
-	//	This thread is currently holding mutexes on all Btrees (because of the LockAll() in LockAndPrepare()) so it is not possible for another thread to start a new schema change while this routine is running. Hence, we do not need to hold locks on the schema, we just need to make sure nobody else is holding them.
+	//	This thread is currently holding mutexes on all Btrees (because of the Lock() in LockAndPrepare()) so it is not possible for another thread to start a new schema change while this routine is running. Hence, we do not need to hold locks on the schema, we just need to make sure nobody else is holding them.
 	//	Note that setting READ_UNCOMMITTED overrides most lock detection, but it does *not* override schema lock detection, so this all still works even if READ_UNCOMMITTED is set.
 	for _, database := range db.Databases {
 		if pBt := database.pBt; pBt != nil {
@@ -385,14 +385,14 @@ static int sqlite3Prepare(
 	pParse.nQueryLoop = 1
 	if nBytes >= 0 && (nBytes == 0 || zSql[nBytes - 1] != 0) {
 		if zSqlCopy := sqlite3DbStrNDup(db, zSql, nBytes); zSqlCopy != "" {
-			pParse.Run(zSqlCopy, &zErrMsg)
+			zErrMsg, _ = pParse.Run(zSqlCopy)
 			zSqlCopy = ""
 			pParse.zTail = &zSql[pParse.zTail - zSqlCopy]
 		} else {
 			pParse.zTail = &zSql[nBytes]
 		}
 	} else {
-		pParse.Run(zSql, &zErrMsg)
+		zErrMsg, _ = pParse.Run(zSql)
 	}
 	assert( int(pParse.nQueryLoop) == 1 )
 
@@ -470,12 +470,12 @@ func (db *sqlite3) LockAndPrepare(Sql string, saveSqlFlag bool, pOld *Vdbe) (sta
 		return SQLITE_MISUSE_BKPT
 	}
 	db.mutex.CriticalSection(func() {
-		db.LockAll()
-		if rc = sqlite3Prepare(db, Sql, len(Sql), saveSqlFlag, pOld, statement, tail); rc == SQLITE_SCHEMA {
-			sqlite3_finalize(statement)
-			rc = sqlite3Prepare(db, Sql, len(Sql), saveSqlFlag, pOld, statement, tail)
-		}
-		db.LeaveBtreeAll()
+		db.CriticalSection(func() {
+			if rc = sqlite3Prepare(db, Sql, len(Sql), saveSqlFlag, pOld, statement, tail); rc == SQLITE_SCHEMA {
+				sqlite3_finalize(statement)
+				rc = sqlite3Prepare(db, Sql, len(Sql), saveSqlFlag, pOld, statement, tail)
+			}
+		})
 	})
 	assert( rc == SQLITE_OK || statement == nil )
 	return

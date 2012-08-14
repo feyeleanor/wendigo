@@ -1,45 +1,25 @@
-/* This module implements the sqlite3_status() interface and related
-** functionality.
-*/
+//	This module implements the Status() interface and related functionality.
+
 /************** Include vdbeInt.h in the middle of status.c ******************/
 /************** Begin file vdbeInt.h *****************************************/
-/* This is the header file for information that is private to the
-** VDBE.  This information used to all be at the top of the single
-** source code file "vdbe.c".  When that file became too big (over
-** 6000 lines long) it was split up into several smaller files and
-** this header information was factored out.
-*/
+//	This is the header file for information that is private to the VDBE. This information used to all be at the top of the single source code file "vdbe.c". When that file became too big (over 6000 lines long) it was split up into several smaller files and this header information was factored out.
 #ifndef _VDBEINT_H_
 #define _VDBEINT_H_
 
-/*
-** SQL is translated into a sequence of instructions to be
-** executed by a virtual machine.  Each instruction is an instance
-** of the following structure.
-*/
+//	SQL is translated into a sequence of instructions to be executed by a virtual machine. Each instruction is an instance of the following structure.
 typedef struct VdbeOp Op;
 
-/*
-** Boolean values
-*/
+//	Boolean values
 typedef unsigned char Bool;
 
-/* Opaque type used by code in vdbesort.c */
+//	Opaque type used by code in vdbesort.c
 typedef struct VdbeSorter VdbeSorter;
 
-/* Opaque type used by the explainer */
+//	Opaque type used by the explainer
 typedef struct Explain Explain;
 
-/*
-** A cursor is a pointer into a single BTree within a database file.
-** The cursor can seek to a BTree entry with a particular key, or
-** loop over all entries of the Btree.  You can also insert new BTree
-** entries or retrieve the key or data from the entry that the cursor
-** is currently pointing to.
-** 
-** Every cursor that the virtual machine has open is represented by an
-** instance of the following structure.
-*/
+//	A cursor is a pointer into a single BTree within a database file. The cursor can seek to a BTree entry with a particular key, or loop over all entries of the Btree. You can also insert new BTree entries or retrieve the key or data from the entry that the cursor is currently pointing to.
+//	Every cursor that the virtual machine has open is represented by an instance of the following structure.
 struct VdbeCursor {
   btree.Cursor *pCursor;    /* The cursor structure of the backend */
   Btree *pBt;           /* Separate file holding temporary table */
@@ -64,19 +44,11 @@ struct VdbeCursor {
   int64 lastRowid;        /* Last rowid from a Next or NextIdx operation */
   VdbeSorter *pSorter;  /* Sorter object for OP_SorterOpen cursors */
 
-  /* Result of last sqlite3BtreeMoveto() done by an OP_NotExists or 
-  ** OP_IsUnique opcode on this cursor. */
+	//	Result of last sqlite3BtreeMoveto() done by an OP_NotExists or OP_IsUnique opcode on this cursor.
   int seekResult;
 
-  /* Cached information about the header for the data record that the
-  ** cursor is currently pointing to.  Only valid if cacheStatus matches
-  ** Vdbe.cacheCtr.  Vdbe.cacheCtr will never take on the value of
-  ** CACHE_STALE and so setting cacheStatus=CACHE_STALE guarantees that
-  ** the cache is out of date.
-  **
-  ** aRow might point to (ephemeral) data for the current row, or it might
-  ** be NULL.
-  */
+	//	Cached information about the header for the data record that the cursor is currently pointing to.  Only valid if cacheStatus matches Vdbe.cacheCtr. Vdbe.cacheCtr will never take on the value of CACHE_STALE and so setting cacheStatus=CACHE_STALE guarantees that the cache is out of date.
+	//	aRow might point to (ephemeral) data for the current row, or it might be NULL.
   uint32 cacheStatus;      /* Cache is valid if this matches Vdbe.cacheCtr */
   int payloadSize;      /* Total number of bytes in the record */
   uint32 *aType;           /* Type values for all entries in the record */
@@ -261,7 +233,7 @@ func (pVal *Mem) ValueText(enc byte) (s string) {
 ** If the MEM_Str flag is set then Mem.z points at a string representation.
 ** Usually this is encoded in the same unicode encoding as the main
 ** database (see below for exceptions). If the MEM_Term flag is also
-** set, then the string is nul terminated. The  and MEM_Real 
+** set, then the string is nul terminated. The  and MEM_Real
 ** flags may coexist with the MEM_Str flag.
 */
 #define MEM_Null      0x0001   /* Value is NULL */
@@ -355,7 +327,7 @@ struct Explain {
 ** set to 2 for xDestroy method calls and 1 for all other methods. This
 ** variable is used for two purposes: to allow xDestroy methods to execute
 ** "DROP TABLE" statements and to prevent some nasty side effects of
-** malloc failure when SQLite is invoked recursively by a virtual table 
+** malloc failure when SQLite is invoked recursively by a virtual table
 ** method function.
 */
 struct Vdbe {
@@ -455,23 +427,13 @@ typedef struct sqlite3StatType sqlite3StatType;
 static struct sqlite3StatType {
   int nowValue[10];         /* Current value */
   int mxValue[10];          /* Maximum value */
-} sqlite3Stat = { {0,}, {0,} };
+} wsdStat = { {0,}, {0,} };
 
-
-/* The "wsdStat" macro will resolve to the status information
-** state vector.  If writable static data is unsupported on the target,
-** we have to locate the state vector at run-time.  In the more common
-** case where writable static data is supported, wsdStat can refer directly
-** to the "sqlite3Stat" state vector declared above.
-*/
-# define wsdStatInit
-# define wsdStat sqlite3Stat
 
 /*
 ** Return the current value of a status parameter.
 */
- int sqlite3StatusValue(int op){
-  wsdStatInit;
+int sqlite3StatusValue(int op){
   assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
   return wsdStat.nowValue[op];
 }
@@ -480,8 +442,7 @@ static struct sqlite3StatType {
 ** Add N to the value of a status record.  It is assumed that the
 ** caller holds appropriate locks.
 */
- void sqlite3StatusAdd(int op, int N){
-  wsdStatInit;
+void sqlite3StatusAdd(int op, int N){
   assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
   wsdStat.nowValue[op] += N;
   if( wsdStat.nowValue[op]>wsdStat.mxValue[op] ){
@@ -492,8 +453,7 @@ static struct sqlite3StatType {
 /*
 ** Set the value of a status to X.
 */
- void sqlite3StatusSet(int op, int X){
-  wsdStatInit;
+void sqlite3StatusSet(int op, int X){
   assert( op>=0 && op<ArraySize(wsdStat.nowValue) );
   wsdStat.nowValue[op] = X;
   if( wsdStat.nowValue[op]>wsdStat.mxValue[op] ){
@@ -501,29 +461,23 @@ static struct sqlite3StatType {
   }
 }
 
-/*
-** Query status information.
-**
-** This implementation assumes that reading or writing an aligned
-** 32-bit integer is an atomic operation.  If that assumption is not true,
-** then this routine is not threadsafe.
-*/
-func int sqlite3_status(int op, int *pCurrent, int *pHighwater, int resetFlag){
-  wsdStatInit;
-  if( op<0 || op>=ArraySize(wsdStat.nowValue) ){
-    return SQLITE_MISUSE_BKPT;
-  }
-  *pCurrent = wsdStat.nowValue[op];
-  *pHighwater = wsdStat.mxValue[op];
-  if( resetFlag ){
-    wsdStat.mxValue[op] = wsdStat.nowValue[op];
-  }
-  return SQLITE_OK;
+//	Query status information.
+//	This implementation assumes that reading or writing an aligned 32-bit integer is an atomic operation. If that assumption is not true, then this routine is not threadsafe.
+func Status(op int, pCurrent *int, pHighwater *int, resetFlag bool) (current, highwater, rc int) {
+	if op < 0 || op >= ArraySize(wsdStat.nowValue) {
+		rc = SQLITE_MISUSE_BKPT
+	} else {
+		current = wsdStat.nowValue[op]
+		highwater = wsdStat.mxValue[op]
+		if resetFlag {
+			wsdStat.mxValue[op] = wsdStat.nowValue[op]
+		}
+	}
+	return
 }
 
-/*
-** Query status information for a single database connection
-*/
+//	Query status information for a single database connection
+func (db *sqlite3) Status(op int, resetFlag bool) (current, highwater, rc int) {
 func int sqlite3_db_status(
   sqlite3 *db,          /* The database connection whose status is desired */
   int op,               /* Status verb */
@@ -531,137 +485,96 @@ func int sqlite3_db_status(
   int *pHighwater,      /* Write high-water mark here */
   int resetFlag         /* Reset high-water mark if true */
 ){
-  int rc = SQLITE_OK;   /* Return code */
-  db.mutex.Lock()
-  switch( op ){
-    case SQLITE_DBSTATUS_LOOKASIDE_USED: {
-      *pCurrent = db.lookaside.nOut;
-      *pHighwater = db.lookaside.mxOut;
-      if( resetFlag ){
-        db.lookaside.mxOut = db.lookaside.nOut;
-      }
-      break;
-    }
-
-    case SQLITE_DBSTATUS_LOOKASIDE_HIT:
-    case SQLITE_DBSTATUS_LOOKASIDE_MISS_SIZE:
-    case SQLITE_DBSTATUS_LOOKASIDE_MISS_FULL: {
-      assert( (op-SQLITE_DBSTATUS_LOOKASIDE_HIT)>=0 );
-      assert( (op-SQLITE_DBSTATUS_LOOKASIDE_HIT)<3 );
-      *pCurrent = 0;
-      *pHighwater = db.lookaside.anStat[op - SQLITE_DBSTATUS_LOOKASIDE_HIT];
-      if( resetFlag ){
-        db.lookaside.anStat[op - SQLITE_DBSTATUS_LOOKASIDE_HIT] = 0;
-      }
-      break;
-    }
-
-    /* 
-    ** Return an approximation for the amount of memory currently used
-    ** by all pagers associated with the given database connection.  The
-    ** highwater mark is meaningless and is returned as zero.
-    */
-    case SQLITE_DBSTATUS_CACHE_USED: {
-      int totalUsed = 0;
-      int i;
-      db.LockAll()
-	  for _, database := range db.Databases {
-        if pBt := database.pBt; pBt != nil {
-          pPager := pBt.Pager()
-          totalUsed += sqlite3PagerMemUsed(pPager)
-        }
-      }
-      db.LeaveBtreeAll()
-      *pCurrent = totalUsed;
-      *pHighwater = 0;
-      break;
-    }
-
-	//	*pCurrent gets an accurate estimate of the amount of memory used to store the schema for all databases (main, temp, and any ATTACHed databases. *pHighwater is set to zero.
-/*    case SQLITE_DBSTATUS_SCHEMA_USED: {
-      int i;                      // Used to iterate through schemas
-      int nByte = 0;              // Used to accumulate return value
-
-      db.LockAll()
-      db.pnBytesFreed = &nByte;
-	  for i, database := range db.Databases {
-        if schema := database.Schema; schema != nil {
-          nByte += sqlite3GlobalConfig.m.xRoundup(sizeof(HashElem)) * (
-              len(schema.Tables)
-            + len(schema.Triggers)
-            + len(schema.Indices)
-            + len(schema.ForeignKeys)
-          )
-          nByte += sqlite3MallocSize(schema.Tables.ht);
-          nByte += sqlite3MallocSize(schema.Triggers.ht);
-          nByte += sqlite3MallocSize(schema.Indices.ht);
-          nByte += sqlite3MallocSize(schema.ForeignKeys.ht);
-
-          for _, trigger := range schema.Triggers {
-            db.DeleteTrigger(trigger)
-          }
-		  for _, p := range schema.Tables {
-		  	db.DeleteTable(p)
-          }
-        }
-      }
-      db.pnBytesFreed = 0;
-      db.LeaveBtreeAll()
-
-      *pHighwater = 0;
-      *pCurrent = nByte;
-      break;
-    }
-*/
-    /*
-    ** *pCurrent gets an accurate estimate of the amount of memory used
-    ** to store all prepared statements.
-    ** *pHighwater is set to zero.
-    */
-    case SQLITE_DBSTATUS_STMT_USED: {
-      struct Vdbe *pVdbe;         /* Used to iterate through VMs */
-      int nByte = 0;              /* Used to accumulate return value */
-
-      db.pnBytesFreed = &nByte;
-      for(pVdbe=db.pVdbe; pVdbe; pVdbe=pVdbe.Next){
-        db.DeleteObject(pVdbe)
-      }
-      db.pnBytesFreed = 0;
-
-      *pHighwater = 0;
-      *pCurrent = nByte;
-
-      break;
-    }
-
-    /*
-    ** Set *pCurrent to the total cache hits or misses encountered by all
-    ** pagers the database handle is connected to. *pHighwater is always set 
-    ** to zero.
-    */
-    case SQLITE_DBSTATUS_CACHE_HIT:
-    case SQLITE_DBSTATUS_CACHE_MISS:
-    case SQLITE_DBSTATUS_CACHE_WRITE:{
-      int i;
-      int nRet = 0;
-      assert( SQLITE_DBSTATUS_CACHE_MISS==SQLITE_DBSTATUS_CACHE_HIT+1 );
-      assert( SQLITE_DBSTATUS_CACHE_WRITE==SQLITE_DBSTATUS_CACHE_HIT+2 );
-
-		for _, database := range db.Databases {
-			if database.pBt != nil {
-				pPager := database.pBt.Pager()
-				sqlite3PagerCacheStat(pPager, op, resetFlag, &nRet)
+	db.mutex.CriticalSection(func() {
+		switch op {
+		case SQLITE_DBSTATUS_LOOKASIDE_USED:
+			current = db.lookaside.nOut
+			highwater = db.lookaside.mxOut
+			if resetFlag {
+				db.lookaside.mxOut = db.lookaside.nOut
 			}
-		}
-      *pHighwater = 0;
-      *pCurrent = nRet;
-      break;
-    }
+		case SQLITE_DBSTATUS_LOOKASIDE_HIT, SQLITE_DBSTATUS_LOOKASIDE_MISS_SIZE, SQLITE_DBSTATUS_LOOKASIDE_MISS_FULL:
+			assert( op - SQLITE_DBSTATUS_LOOKASIDE_HIT >= 0 )
+			assert( op - SQLITE_DBSTATUS_LOOKASIDE_HIT < 3 )
+			current = 0
+			highwater = db.lookaside.anStat[op - SQLITE_DBSTATUS_LOOKASIDE_HIT]
+			if resetFlag {
+				db.lookaside.anStat[op - SQLITE_DBSTATUS_LOOKASIDE_HIT] = 0
+			}
+		case SQLITE_DBSTATUS_CACHE_USED:
+			//	Return an approximation for the amount of memory currently used by all pagers associated with the given database connection. The highwater mark is meaningless and is returned as zero.
+			db.CriticalSection(func() {
+				totalUsed := 0;
+				for _, database := range db.Databases {
+					if pBt := database.pBt; pBt != nil {
+						pPager := pBt.Pager()
+						totalUsed += sqlite3PagerMemUsed(pPager)
+					}
+				}
+			})
+			current = totalUsed
+			highwater = 0
+/*		case SQLITE_DBSTATUS_SCHEMA_USED: {
+			//	*pCurrent gets an accurate estimate of the amount of memory used to store the schema for all databases (main, temp, and any ATTACHed databases. *pHighwater is set to zero.
+			int nByte = 0;              // Used to accumulate return value
 
-    default: {
-      rc = SQLITE_ERROR;
-    }
-  }
-  db.mutex.Unlock()
-  return rc;
+			db.CriticalSection(func() {
+				db.pnBytesFreed = &nByte
+				for i, database := range db.Databases {
+					if schema := database.Schema; schema != nil {
+						nByte += sqlite3GlobalConfig.m.xRoundup(sizeof(HashElem)) * (
+							len(schema.Tables)
+							+ len(schema.Triggers)
+							+ len(schema.Indices)
+							+ len(schema.ForeignKeys)
+						)
+						nByte += sqlite3MallocSize(schema.Tables.ht);
+						nByte += sqlite3MallocSize(schema.Triggers.ht);
+						nByte += sqlite3MallocSize(schema.Indices.ht);
+						nByte += sqlite3MallocSize(schema.ForeignKeys.ht);
+
+						for _, trigger := range schema.Triggers {
+							db.DeleteTrigger(trigger)
+						}
+						for _, p := range schema.Tables {
+							db.DeleteTable(p)
+						}
+					}
+				}
+				db.pnBytesFreed = 0
+			})
+
+			highwater = 0
+			current = nByte
+*/
+		case SQLITE_DBSTATUS_STMT_USED:
+			//	urrent gets an accurate estimate of the amount of memory used to store all prepared statements. highwater is set to zero.
+			var nByte	int				//	Used to accumulate return value
+
+			db.pnBytesFreed = &nByte
+			for vdbe := db.pVdbe; vdbe != nil ; vdbe = vdbe.Next {
+				db.DeleteObject(vdbe)
+			}
+			db.pnBytesFreed = 0
+			highwater = 0
+			current = nByte
+		case SQLITE_DBSTATUS_CACHE_HIT, SQLITE_DBSTATUS_CACHE_MISS, SQLITE_DBSTATUS_CACHE_WRITE:
+			//	Set current to the total cache hits or misses encountered by all pagers the database handle is connected to. highwater is always set to zero.
+			int nRet = 0;
+			assert( SQLITE_DBSTATUS_CACHE_MISS == SQLITE_DBSTATUS_CACHE_HIT + 1 )
+			assert( SQLITE_DBSTATUS_CACHE_WRITE == SQLITE_DBSTATUS_CACHE_HIT + 2 )
+
+			for _, database := range db.Databases {
+				if database.pBt != nil {
+					pPager := database.pBt.Pager()
+					sqlite3PagerCacheStat(pPager, op, resetFlag, &nRet)
+				}
+			}
+			highwater = 0
+			current = nRet
+		default:
+			rc = SQLITE_ERROR
+		}
+	})
+	return
 }

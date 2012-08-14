@@ -30,13 +30,13 @@
 #endif
 
 /* IMPLEMENTATION-OF: R-53536-42575 The sqlite3_libversion() function returns
-** a pointer to the to the sqlite3_version[] string constant. 
+** a pointer to the to the sqlite3_version[] string constant.
 */
 func const char *sqlite3_libversion(void){ return sqlite3_version; }
 
 /* IMPLEMENTATION-OF: R-63124-39300 The sqlite3_sourceid() function returns a
 ** pointer to a string constant whose value is the same as the
-** SQLITE_SOURCE_ID C preprocessor macro. 
+** SQLITE_SOURCE_ID C preprocessor macro.
 */
 func const char *sqlite3_sourceid(void){ return SQLITE_SOURCE_ID; }
 
@@ -64,7 +64,7 @@ func int sqlite3_libversion_number(void){ return SQLITE_VERSION_NUMBER; }
 */
 func char *sqlite3_temp_directory = 0;
 
-//	Initialize SQLite.  
+//	Initialize SQLite.
 //
 //	This routine must be called to initialize the memory allocation, VFS, and mutex subsystems prior to doing any serious work with SQLite.
 //
@@ -194,7 +194,7 @@ func int sqlite3_config(int op, ...){
   switch( op ){
 
     /* Mutex configuration options are only available in a threadsafe
-    ** compile. 
+    ** compile.
     */
     case SQLITE_CONFIG_SINGLETHREAD: {
       /* Disable all mutexing */
@@ -285,7 +285,7 @@ func int sqlite3_config(int op, ...){
       sqlite3GlobalConfig.nLookaside = va_arg(ap, int);
       break;
     }
-    
+
     /* Record a pointer to the logger funcction and its first argument.
     ** The default is NULL.  Logging is disabled if the function pointer is
     ** NULL.
@@ -317,7 +317,7 @@ func int sqlite3_config(int op, ...){
 
 /*
 ** Set up the lookaside buffers for a database connection.
-** Return SQLITE_OK on success.  
+** Return SQLITE_OK on success.
 ** If lookaside is already active, return SQLITE_BUSY.
 **
 ** The sz parameter is the number of bytes in each lookaside slot.
@@ -332,7 +332,7 @@ static int setupLookaside(sqlite3 *db, void *pBuf, int sz, int cnt){
     return SQLITE_BUSY;
   }
   /* Free any existing lookaside buffer for this handle before
-  ** allocating a new one so we don't have to have space for 
+  ** allocating a new one so we don't have to have space for
   ** both at the same time.
   */
   if( db.lookaside.bMalloced ){
@@ -384,16 +384,16 @@ func sqlite3_mutex *sqlite3_db_mutex(sqlite3 *db){
 
 //	Free up as much memory as we can from the given database connection.
 func (db *sqlite3) db_release_memory() int {
-	db.mutex.Lock()
-	db.LockAll()
-	for i, _ := range db.Databases {
-		if pBt := db.Databases[i].pBt; pBt != nil {
-			sqlite3PagerShrink(pBt.Pager())
-		}
-	}
-	db.LeaveBtreeAll()
-	db.mutex.Unlock()
-	return SQLITE_OK
+	db.mutex.CriticalSection(func() {
+		db.CriticalSection(func() {
+			for i, _ := range db.Databases {
+				if pBt := db.Databases[i].pBt; pBt != nil {
+					sqlite3PagerShrink(pBt.Pager())
+				}
+			}
+		})
+	})
+	return
 }
 
 /*
@@ -486,7 +486,7 @@ static int binCollFunc(
 }
 
 /*
-** Another built-in collating sequence: NOCASE. 
+** Another built-in collating sequence: NOCASE.
 **
 ** This collating sequence is intended to be used for "case independant
 ** comparison". SQLite's knowledge of upper and lower case equivalents
@@ -790,7 +790,7 @@ static int sqliteDefaultBusyCallback(
   }else{
     p.nBusy++;
   }
-  return rc; 
+  return rc;
 }
 
 /*
@@ -854,7 +854,7 @@ func void sqlite3_interrupt(sqlite3 *db){
 ** This function is exactly the same as sqlite3_create_function(), except
 ** that it is designed to be called by internal code. The difference is
 ** that if a malloc() fails in sqlite3_create_function(), an error code
-** is returned and the mallocFailed flag cleared. 
+** is returned and the mallocFailed flag cleared.
 */
  int sqlite3CreateFunc(
   sqlite3 *db,
@@ -871,14 +871,14 @@ func void sqlite3_interrupt(sqlite3 *db){
   int nName;
 
   if( zFunctionName==0 ||
-      (xFunc && (xFinal || xStep)) || 
+      (xFunc && (xFinal || xStep)) ||
       (!xFunc && (xFinal && !xStep)) ||
       (!xFunc && (!xFinal && xStep)) ||
       (nArg<-1 || nArg>SQLITE_MAX_FUNCTION_ARG) ||
       (255<(nName = sqlite3Strlen30( zFunctionName))) ){
     return SQLITE_MISUSE_BKPT;
   }
-  
+
   enc = SQLITE_UTF8;
 
   /* Check if an existing function is being overridden or deleted. If so,
@@ -978,7 +978,7 @@ func int sqlite3_create_function_v2(
 **
 ** If the function already exists as a regular global function, then
 ** this routine is a no-op.  If the function does not exist, then create
-** a new one that always throws a run-time error.  
+** a new one that always throws a run-time error.
 **
 ** When virtual tables intend to provide an overloaded function, they
 ** should call this routine to make sure the global function exists.
@@ -1005,7 +1005,7 @@ func int sqlite3_overload_function(
 #ifndef SQLITE_OMIT_TRACE
 /*
 ** Register a trace function.  The pArg from the previously registered trace
-** is returned.  
+** is returned.
 **
 ** A NULL trace function means that no tracing is executes.  A non-NULL
 ** trace is a pointer to a function that is invoked at the start of each
@@ -1021,7 +1021,7 @@ func void *sqlite3_trace(sqlite3 *db, void (*xTrace)(void*,const char*), void *p
   return pOld;
 }
 
-//	Register a profile function. The pArg from the previously registered profile function is returned.  
+//	Register a profile function. The pArg from the previously registered profile function is returned.
 //
 //	A NULL profile function means that no profiling is executes. A non-NULL profile is a pointer to a function that is invoked at the conclusion of
 //	each SQL statement that is run.
@@ -1097,7 +1097,7 @@ func void *sqlite3_rollback_hook(
 ** Invoke sqlite3_wal_checkpoint if the number of frames in the log file
 ** is greater than sqlite3.pWalArg cast to an integer (the value configured by
 ** wal_autocheckpoint()).
-*/ 
+*/
  int sqlite3WalDefaultHook(
   void *pClientData,     /* Argument */
   sqlite3 *db,           /* Connection */
@@ -1202,7 +1202,7 @@ func int sqlite3_wal_checkpoint_v2(
 
 /*
 ** Checkpoint database zDb. If zDb is NULL, or if the buffer zDb points
-** to contains a zero-length string, all attached databases are 
+** to contains a zero-length string, all attached databases are
 ** checkpointed.
 */
 func int sqlite3_wal_checkpoint(sqlite3 *db, const char *zDb){
@@ -1214,9 +1214,9 @@ func int sqlite3_wal_checkpoint(sqlite3 *db, const char *zDb){
 ** Run a checkpoint on database iDb. This is a no-op if database iDb is
 ** not currently open in WAL mode.
 **
-** If a transaction is open on the database being checkpointed, this 
-** function returns SQLITE_LOCKED and a checkpoint is not attempted. If 
-** an error occurs while running the checkpoint, an SQLite error code is 
+** If a transaction is open on the database being checkpointed, this
+** function returns SQLITE_LOCKED and a checkpoint is not attempted. If
+** an error occurs while running the checkpoint, an SQLite error code is
 ** returned (i.e. SQLITE_IOERR). Otherwise, SQLITE_OK.
 **
 ** The mutex on database handle db should be held by the caller. The mutex
@@ -1342,7 +1342,7 @@ func int sqlite3_extended_errcode(sqlite3 *db){
 */
 static int createCollation(
   sqlite3* db,
-  const char *Name, 
+  const char *Name,
   byte enc,
   void* pCtx,
   int(*xCompare)(void*,int,const void*,int,const void*),
@@ -1351,13 +1351,13 @@ static int createCollation(
   CollSeq *pColl;
   int enc2;
   int nName = sqlite3Strlen30(Name);
-  
+
   enc2 = enc;
   if enc2 != SQLITE_UTF8 {
     return SQLITE_MISUSE_BKPT
   }
 
-  /* Check if this call is removing or replacing an existing collation 
+  /* Check if this call is removing or replacing an existing collation
   ** sequence. If so, and there are active VMs, return busy. If there
   ** are no active VMs, invalidate any pre-compiled statements.
   */
@@ -1374,7 +1374,7 @@ static int createCollation(
     ** then any copies made by synthCollSeq() need to be invalidated.
     ** Also, collation destructor - CollSeq.xDel() - function may need
     ** to be called.
-    */ 
+    */
     if pColl.enc == enc2 {
       CollSeq *aColl = db.Collations[Name]
       int j;
@@ -1504,7 +1504,7 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
 ** query parameter. The second argument contains the URI (or non-URI filename)
 ** itself. When this function is called the *pFlags variable should contain
 ** the default flags to open the database handle with. The value stored in
-** *pFlags may be updated before returning if the URI filename contains 
+** *pFlags may be updated before returning if the URI filename contains
 ** "cache=xxx" or "mode=xxx" query parameters.
 **
 ** If successful, SQLITE_OK is returned. In this case *ppVfs is set to point to
@@ -1512,14 +1512,14 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
 ** point to a buffer containing the name of the file to open.
 **
 ** If an error occurs, then an SQLite error code is returned and *pzErrMsg
-** may be set to point to a buffer containing an English language error 
+** may be set to point to a buffer containing an English language error
 ** message.
 */
  int sqlite3ParseUri(
   const char *zDefaultVfs,        /* VFS to use if no "vfs=xxx" query option */
   const char *zUri,               /* Nul-terminated URI to parse */
   uint *pFlags,           /* IN/OUT: SQLITE_OPEN_XXX flags */
-  sqlite3_vfs **ppVfs,            /* OUT: VFS to use */ 
+  sqlite3_vfs **ppVfs,            /* OUT: VFS to use */
   char **pzFile,                  /* OUT: Filename component of URI */
   char **pzErrMsg                 /* OUT: Error message (if rc!=SQLITE_OK) */
 ){
@@ -1532,8 +1532,8 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
 
   assert( *pzErrMsg==0 );
 
-  if( ((flags & SQLITE_OPEN_URI) || sqlite3GlobalConfig.bOpenUri) 
-   && nUri>=5 && memcmp(zUri, "file:", 5)==0 
+  if( ((flags & SQLITE_OPEN_URI) || sqlite3GlobalConfig.bOpenUri)
+   && nUri>=5 && memcmp(zUri, "file:", 5)==0
   ){
     char *zOpt;
     int eState;                   /* Parser state when parsing URI */
@@ -1541,7 +1541,7 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
     int iOut = 0;                 /* Output character index */
     int nByte = nUri+2;           /* Bytes of space to allocate */
 
-    /* Make sure the SQLITE_OPEN_URI flag is set to indicate to the VFS xOpen 
+    /* Make sure the SQLITE_OPEN_URI flag is set to indicate to the VFS xOpen
     ** method that there may be extra parameters following the file-name.  */
     flags |= SQLITE_OPEN_URI;
 
@@ -1563,8 +1563,8 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
       iIn = 5;
     }
 
-    /* Copy the filename and any query parameters into the zFile buffer. 
-    ** Decode %HH escape codes along the way. 
+    /* Copy the filename and any query parameters into the zFile buffer.
+    ** Decode %HH escape codes along the way.
     **
     ** Within this loop, variable eState may be set to 0, 1 or 2, depending
     ** on the parsing context. As follows:
@@ -1576,9 +1576,9 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
     eState = 0;
     while( (c = zUri[iIn])!=0 && c!='#' ){
       iIn++;
-      if( c=='%' 
-       && sqlite3Isxdigit(zUri[iIn]) 
-       && sqlite3Isxdigit(zUri[iIn+1]) 
+      if( c=='%'
+       && sqlite3Isxdigit(zUri[iIn])
+       && sqlite3Isxdigit(zUri[iIn+1])
       ){
         int octet = (sqlite3HexToInt(zUri[iIn++]) << 4);
         octet += sqlite3HexToInt(zUri[iIn++]);
@@ -1589,7 +1589,7 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
           ** case we ignore all text in the remainder of the path, name or
           ** value currently being parsed. So ignore the current character
           ** and skip to the next "?", "=" or "&", as appropriate. */
-          while( (c = zUri[iIn])!=0 && c!='#' 
+          while( (c = zUri[iIn])!=0 && c!='#'
               && (eState!=0 || c!='?')
               && (eState!=1 || (c!='=' && c!='&'))
               && (eState!=2 || c!='&')
@@ -1621,7 +1621,7 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
     zFile[iOut++] = '\0';
     zFile[iOut++] = '\0';
 
-    /* Check if there were any options specified that should be interpreted 
+    /* Check if there were any options specified that should be interpreted
     ** here. Options that are interpreted here include "vfs" and those that
     ** correspond to flags that may be passed to the sqlite3_open_v2()
     ** method. */
@@ -1657,7 +1657,7 @@ func int sqlite3_limit(sqlite3 *db, int limitId, int newLimit){
         if( nOpt==4 && memcmp("mode", zOpt, 4)==0 ){
           static struct OpenMode aOpenMode[] = {
             { "ro",  SQLITE_OPEN_READONLY },
-            { "rw",  SQLITE_OPEN_READWRITE }, 
+            { "rw",  SQLITE_OPEN_READWRITE },
             { "rwc", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE },
             { 0, 0 }
           };
@@ -1735,7 +1735,7 @@ static int openDatabase(
 
   *ppDb = 0;
 
-  /* Only allow sensible combinations of bits in the flags argument.  
+  /* Only allow sensible combinations of bits in the flags argument.
   ** Throw an error if any non-sense combination is used.  If we
   ** do not block illegal combinations here, it could trigger
   ** assert() statements in deeper layers.  Sensible combinations
@@ -1777,11 +1777,11 @@ static int openDatabase(
   flags &=  ~( SQLITE_OPEN_DELETEONCLOSE |
                SQLITE_OPEN_EXCLUSIVE |
                SQLITE_OPEN_MAIN_DB |
-               SQLITE_OPEN_TEMP_DB | 
-               SQLITE_OPEN_TRANSIENT_DB | 
-               SQLITE_OPEN_MAIN_JOURNAL | 
-               SQLITE_OPEN_TEMP_JOURNAL | 
-               SQLITE_OPEN_SUBJOURNAL | 
+               SQLITE_OPEN_TEMP_DB |
+               SQLITE_OPEN_TRANSIENT_DB |
+               SQLITE_OPEN_MAIN_JOURNAL |
+               SQLITE_OPEN_TEMP_JOURNAL |
+               SQLITE_OPEN_SUBJOURNAL |
                SQLITE_OPEN_MASTER_JOURNAL |
                SQLITE_OPEN_NOMUTEX |
                SQLITE_OPEN_FULLMUTEX |
@@ -1863,7 +1863,7 @@ static int openDatabase(
 
 
   /* The default safety_level for the main database is 'full'; for the temp
-  ** database it is 'NONE'. This matches the pager layer defaults.  
+  ** database it is 'NONE'. This matches the pager layer defaults.
   */
   db.Databases[0].Name = "main";
   db.Databases[0].safety_level = 3;
@@ -1960,8 +1960,8 @@ opendb_out:
 ** Open a new database handle.
 */
 func int sqlite3_open(
-  const char *zFilename, 
-  sqlite3 **ppDb 
+  const char *zFilename,
+  sqlite3 **ppDb
 ){
   return openDatabase(zFilename, ppDb,
                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 0);
@@ -1979,9 +1979,9 @@ func int sqlite3_open_v2(
 ** Register a new collation sequence with the database handle db.
 */
 func int sqlite3_create_collation(
-  sqlite3* db, 
-  const char *Name, 
-  int enc, 
+  sqlite3* db,
+  const char *Name,
+  int enc,
   void* pCtx,
   int(*xCompare)(void*,int,const void*,int,const void*)
 ){
@@ -1998,9 +1998,9 @@ func int sqlite3_create_collation(
 ** Register a new collation sequence with the database handle db.
 */
 func int sqlite3_create_collation_v2(
-  sqlite3* db, 
-  const char *Name, 
-  int enc, 
+  sqlite3* db,
+  const char *Name,
+  int enc,
   void* pCtx,
   int(*xCompare)(void*,int,const void*,int,const void*),
   void(*xDel)(void*)
@@ -2019,8 +2019,8 @@ func int sqlite3_create_collation_v2(
 ** db. Replace any previously installed collation sequence factory.
 */
 func int sqlite3_collation_needed(
-  sqlite3 *db, 
-  void *pCollNeededArg, 
+  sqlite3 *db,
+  void *pCollNeededArg,
   void(*xCollNeeded)(void*,sqlite3*,int eTextRep,const char*)
 ){
   db.mutex.Lock()
@@ -2061,140 +2061,94 @@ func int sqlite3_get_autocommit(sqlite3 *db){
   return SQLITE_CORRUPT;
 }
  int sqlite3MisuseError(int lineno){
-  sqlite3_log(SQLITE_MISUSE, 
+  sqlite3_log(SQLITE_MISUSE,
               "misuse at line %d of [%.10s]",
               lineno, 20+sqlite3_sourceid());
   return SQLITE_MISUSE;
 }
  int sqlite3CantopenError(int lineno){
-  sqlite3_log(SQLITE_CANTOPEN, 
+  sqlite3_log(SQLITE_CANTOPEN,
               "cannot open file at line %d of [%.10s]",
               lineno, 20+sqlite3_sourceid());
   return SQLITE_CANTOPEN;
 }
 
 
-/*
-** Return meta information about a specific column of a database table.
-** See comment in sqlite3.h (sqlite.h.in) for details.
-*/
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
-func int sqlite3_table_column_metadata(
-  sqlite3 *db,                /* Connection handle */
-  const char *zDbName,        /* Database name or NULL */
-  const char *zTableName,     /* Table name */
-  const char *zColumnName,    /* Column name */
-  char const **pzDataType,    /* OUTPUT: Declared data type */
-  char const **pzCollSeq,     /* OUTPUT: Collation sequence name */
-  int *pNotNull,              /* OUTPUT: True if NOT NULL constraint exists */
-  int *pPrimaryKey,           /* OUTPUT: True if column part of PK */
-  int *pAutoinc               /* OUTPUT: True if column is auto-increment */
-){
-  int rc;
-  char *zErrMsg = 0;
-  Table *pTab = 0;
-  Column *pCol = 0;
-  int iCol;
+//	Return meta information about a specific column of a database table. See comment in sqlite3.h (sqlite.h.in) for details.
+func (db *sqlite3) TableColumnMetadata(DbName, TableName, ColumnName string) (DataType, Collseq string, NotNull, PrimaryKey, AutoInc bool, rc int) {
+	//	Ensure the database schema has been loaded
+	db.mutex.CriticalSection(func() {
+		var table	*Table
+		db.CriticalSection(func() {
+			if rc = db.Init(zErrMsg); rc == SQLITE_OK {
+				//	Locate the table in question
+				if table = db.FindTable(TableName, DbName); table == nil || table.Select != nil {
+					return
+				}
 
-  char const *zDataType = 0;
-  char const *zCollSeq = 0;
-  int notnull = 0;
-  int primarykey = 0;
-  int autoinc = 0;
+				var column	*Column
+				column_index := 0
+				//	Find the column for which info is requested
+				if sqlite3IsRowid(ColumnName) {
+					if column_index = table.iPKey; column_index >= 0 {
+						column = &table.Columns[column_index]
+					}
+				} else {
+					for ; column_index < table.nCol; column_index++ {
+						column = &table.Columns[column_index]
+						if CaseInsensitiveMatch(column.Name, ColumnName) {
+							break
+						}
+					}
+					if column_index == table.nCol {
+						return
+					}
+				}
 
-  /* Ensure the database schema has been loaded */
-  db.mutex.Lock()
-  db.LockAll()
-  rc = db.Init(zErrMsg)
-  if( SQLITE_OK!=rc ){
-    goto error_out;
-  }
+				//	The following block stores the meta information that will be returned to the caller in local variables zDataType, zCollSeq, notnull, primarykey and autoinc. At this point there are two possibilities:
+				//		1	The specified column name was rowid", "oid" or "_rowid_" and there is no explicitly declared IPK column.
+				//		2	The table is not a view and the column name identified an explicitly declared column. Copy meta information from *pCol.
+				if column != nil {
+					DataType = column.zType
+					CollSeq = column.zColl
+					NotNull = column.notNull != false
+					PrimaryKey  = column.isPrimKey != false
+					AutoInc = table.iPKey == column_index && table.tabFlags & TF_Autoincrement != 0
+				} else {
+					DataType = "INTEGER"
+					PrimaryKey = true
+				}
+				if CollSeq == "" {
+					CollSeq = "BINARY"
+				}
+			}
+		})
 
-  /* Locate the table in question */
-  pTab = db.FindTable(zTableName, zDbName)
-  if( !pTab || pTab.Select ){
-    pTab = 0;
-    goto error_out;
-  }
+		//	Whether the function call succeeded or failed, set the output parameters to whatever their local counterparts contain. If an error did occur, this has the effect of zeroing all output parameters.
 
-  /* Find the column for which info is requested */
-  if( sqlite3IsRowid(zColumnName) ){
-    iCol = pTab.iPKey;
-    if( iCol>=0 ){
-      pCol = &pTab.Columns[iCol];
-    }
-  }else{
-    for(iCol=0; iCol<pTab.nCol; iCol++){
-      pCol = &pTab.Columns[iCol];
-      if CaseInsensitiveMatch(pCol.Name, zColumnName) {
-        break;
-      }
-    }
-    if( iCol==pTab.nCol ){
-      pTab = 0;
-      goto error_out;
-    }
-  }
-
-  /* The following block stores the meta information that will be returned
-  ** to the caller in local variables zDataType, zCollSeq, notnull, primarykey
-  ** and autoinc. At this point there are two possibilities:
-  ** 
-  **     1. The specified column name was rowid", "oid" or "_rowid_" 
-  **        and there is no explicitly declared IPK column. 
-  **
-  **     2. The table is not a view and the column name identified an 
-  **        explicitly declared column. Copy meta information from *pCol.
-  */ 
-  if( pCol ){
-    zDataType = pCol.zType;
-    zCollSeq = pCol.zColl;
-    notnull = pCol.notNull!=0;
-    primarykey  = pCol.isPrimKey!=0;
-    autoinc = pTab.iPKey==iCol && (pTab.tabFlags & TF_Autoincrement)!=0;
-  }else{
-    zDataType = "INTEGER";
-    primarykey = 1;
-  }
-  if( !zCollSeq ){
-    zCollSeq = "BINARY";
-  }
-
-error_out:
-  db.LeaveBtreeAll()
-
-  /* Whether the function call succeeded or failed, set the output parameters
-  ** to whatever their local counterparts contain. If an error did occur,
-  ** this has the effect of zeroing all output parameters.
-  */
-  if( pzDataType ) *pzDataType = zDataType;
-  if( pzCollSeq ) *pzCollSeq = zCollSeq;
-  if( pNotNull ) *pNotNull = notnull;
-  if( pPrimaryKey ) *pPrimaryKey = primarykey;
-  if( pAutoinc ) *pAutoinc = autoinc;
-
-  if( SQLITE_OK==rc && !pTab ){
-    zErrMsg = fmt.Sprintf("no such table column: %v.%v", zTableName, zColumnName);
-    rc = SQLITE_ERROR;
-  }
-  db.Error(rc, (zErrMsg?"%s":0), zErrMsg);
-  zErrMsg = nil
-  rc = db.ApiExit(rc)
-  db.mutex.Unlock()
-  return rc;
+		ErrMsg := ""
+		if rc == SQLITE_OK && table == nil {
+			ErrMsg = fmt.Sprintf("no such table column: %v.%v", TableName, ColumnName)
+			rc = SQLITE_ERROR
+		}
+		if ErrMsg != "" {
+			db.Error(rc, "%s", ErrMsg)
+		} else {
+			db.Error(rc, "", ErrMsg)
+		}
+		rc = db.ApiExit(rc)
+	})
+	return
 }
-#endif
 
-/*
-** Sleep for a little while.  Return the amount of time slept.
-*/
+//	Sleep for a little while.  Return the amount of time slept.
 func int sqlite3_sleep(int ms){
   sqlite3_vfs *pVfs;
   int rc;
   pVfs = sqlite3_vfs_find(0);
   if( pVfs==0 ) return 0;
 
-  /* This function works in milliseconds, but the underlying OsSleep() 
+  /* This function works in milliseconds, but the underlying OsSleep()
   ** API uses microseconds. Hence the 1000's.
   */
   rc = (sqlite3OsSleep(pVfs, 1000*ms)/1000);
@@ -2239,12 +2193,12 @@ func int sqlite3_file_control(sqlite3 *db, const char *zDbName, int op, void *pA
     pBtree.Unlock()
   }
   db.mutex.Unlock()
-  return rc;   
+  return rc;
 }
 
 /*
 ** This is a utility routine, useful to VFS implementations, that checks
-** to see if a database file was a URI that contained a specific query 
+** to see if a database file was a URI that contained a specific query
 ** parameter, and if so obtains the value of the query parameter.
 **
 ** The zFilename argument is the filename pointer passed into the xOpen()

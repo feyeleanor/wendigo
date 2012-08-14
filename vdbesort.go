@@ -11,32 +11,32 @@ typedef struct SorterRecord SorterRecord;
 ** the same as the cache-size allowed for temporary databases. In order
 ** to allow the caller to extract keys from the sorter in sorted order,
 ** all PMAs currently stored on disk must be merged together. This comment
-** describes the data structure used to do so. The structure supports 
-** merging any number of arrays in a single pass with no redundant comparison 
+** describes the data structure used to do so. The structure supports
+** merging any number of arrays in a single pass with no redundant comparison
 ** operations.
 **
 ** The aIter[] array contains an iterator for each of the PMAs being merged.
-** An aIter[] iterator either points to a valid key or else is at EOF. For 
-** the purposes of the paragraphs below, we assume that the array is actually 
-** N elements in size, where N is the smallest power of 2 greater to or equal 
-** to the number of iterators being merged. The extra aIter[] elements are 
+** An aIter[] iterator either points to a valid key or else is at EOF. For
+** the purposes of the paragraphs below, we assume that the array is actually
+** N elements in size, where N is the smallest power of 2 greater to or equal
+** to the number of iterators being merged. The extra aIter[] elements are
 ** treated as if they are empty (always at EOF).
 **
 ** The aTree[] array is also N elements in size. The value of N is stored in
 ** the VdbeSorter.nTree variable.
 **
 ** The final (N/2) elements of aTree[] contain the results of comparing
-** pairs of iterator keys together. Element i contains the result of 
+** pairs of iterator keys together. Element i contains the result of
 ** comparing aIter[2*i-N] and aIter[2*i-N+1]. Whichever key is smaller, the
-** aTree element is set to the index of it. 
+** aTree element is set to the index of it.
 **
 ** For the purposes of this comparison, EOF is considered greater than any
 ** other key value. If the keys are equal (only possible with two EOF
 ** values), it doesn't matter which index is stored.
 **
-** The (N/4) elements of aTree[] that preceed the final (N/2) described 
+** The (N/4) elements of aTree[] that preceed the final (N/2) described
 ** above contains the index of the smallest of each block of 4 iterators.
-** And so on. So that aTree[1] contains the index of the iterator that 
+** And so on. So that aTree[1] contains the index of the iterator that
 ** currently points to the smallest key value. aTree[0] is unused.
 **
 ** Example:
@@ -52,7 +52,7 @@ typedef struct SorterRecord SorterRecord;
 **
 **     aTree[] = { X, 5   0, 5    0, 3, 5, 6 }
 **
-** The current element is "Apple" (the value of the key indicated by 
+** The current element is "Apple" (the value of the key indicated by
 ** iterator 5). When the Next() operation is invoked, iterator 5 will
 ** be advanced to the next key in its segment. Say the next key is
 ** "Eggplant":
@@ -280,7 +280,7 @@ int sqlite3VdbeSorterInit(sqlite3 *db, VdbeCursor *pCsr){
   if( pSorter==0 ){
     return SQLITE_NOMEM;
   }
-  
+
   pSorter.pUnpacked = sqlite3VdbeAllocUnpackedRecord(pCsr.pKeyInfo, 0, 0, &d);
   if( pSorter.pUnpacked==0 ) return SQLITE_NOMEM;
   assert( pSorter.pUnpacked==(UnpackedRecord *)d );
@@ -398,8 +398,8 @@ static int vdbeSorterSort(VdbeCursor *pCsr){
 **     * A varint. This varint contains the total number of bytes of content
 **       in the PMA (not including the varint itself).
 **
-**     * One or more records packed end-to-end in order of ascending keys. 
-**       Each record consists of a varint followed by a blob of data (the 
+**     * One or more records packed end-to-end in order of ascending keys.
+**       Each record consists of a varint followed by a blob of data (the
 **       key). The varint is the number of bytes in the blob of data.
 */
 static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
@@ -441,9 +441,9 @@ static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
       p = nil
     }
 
-    /* This assert verifies that unless an error has occurred, the size of 
+    /* This assert verifies that unless an error has occurred, the size of
     ** the PMA on disk is the same as the expected size stored in
-    ** pSorter.nInMemory. */ 
+    ** pSorter.nInMemory. */
     assert( rc != SQLITE_OK || pSorter.nInMemory == iOff - pSorter.iWriteOff - VarintLen(pSorter.nInMemory))
 
     pSorter.iWriteOff = iOff;
@@ -466,42 +466,32 @@ static int vdbeSorterListToPMA(sqlite3 *db, VdbeCursor *pCsr){
   VdbeCursor *pCsr,               /* Sorter cursor */
   Mem *pVal                       /* Memory cell containing record */
 ){
-  VdbeSorter *pSorter = pCsr.pSorter;
-  int rc = SQLITE_OK;             /* Return Code */
-  SorterRecord *pNew;             /* New list element */
+	VdbeSorter *pSorter = pCsr.pSorter;
+	int rc = SQLITE_OK;             /* Return Code */
+	SorterRecord *pNew;             /* New list element */
 
-  assert( pSorter );
-  pSorter.nInMemory += VarintLen(pVal.n) + pVal.n;
+	assert( pSorter );
+	pSorter.nInMemory += VarintLen(pVal.n) + pVal.n;
 
-  pNew = (SorterRecord *)sqlite3DbMallocRaw(db, pVal.n + sizeof(SorterRecord));
-  if( pNew==0 ){
-    rc = SQLITE_NOMEM;
-  }else{
-    pNew.pVal = (void *)&pNew[1];
-    memcpy(pNew.pVal, pVal.z, pVal.n);
-    pNew.nVal = pVal.n;
-    pNew.Next = pSorter.pRecord;
-    pSorter.pRecord = pNew;
-  }
+	pNew = (SorterRecord *)sqlite3DbMallocRaw(db, pVal.n + sizeof(SorterRecord));
+	if pNew == nil {
+		rc = SQLITE_NOMEM
+	} else {
+		pNew.pVal = (void *)&pNew[1]
+		memcpy(pNew.pVal, pVal.z, pVal.n)
+		pNew.nVal = pVal.n
+		pNew.Next = pSorter.pRecord
+		pSorter.pRecord = pNew
+	}
 
-  /* See if the contents of the sorter should now be written out. They
-  ** are written out when either of the following are true:
-  **
-  **   * The total memory allocated for the in-memory list is greater 
-  **     than (page-size * cache-size), or
-  **
-  **   * The total memory allocated for the in-memory list is greater 
-  **     than (page-size * 10) and sqlite3HeapNearlyFull() returns true.
-  */
-  if( rc==SQLITE_OK && pSorter.mxPmaSize>0 && (
-        (pSorter.nInMemory>pSorter.mxPmaSize)
-     || (pSorter.nInMemory>pSorter.mnPmaSize && sqlite3HeapNearlyFull())
-  )){
-    rc = vdbeSorterListToPMA(db, pCsr);
-    pSorter.nInMemory = 0;
-  }
-
-  return rc;
+	//	See if the contents of the sorter should now be written out.They are written out when either of the following are true:
+	//		* The total memory allocated for the in-memory list is greater than (page-size * cache-size), or
+	//		* The total memory allocated for the in-memory list is greater than (page-size * 10) and IsHeapNearlyFull() returns true.
+	if rc == SQLITE_OK && pSorter.mxPmaSize > 0 && (pSorter.nInMemory > pSorter.mxPmaSize || (pSorter.nInMemory > pSorter.mnPmaSize && IsHeapNearlyFull()) {
+		rc = vdbeSorterListToPMA(db, pCsr)
+		pSorter.nInMemory = 0
+	}
+	return rc;
 }
 
 //	Helper function for sqlite3VdbeSorterRewind().

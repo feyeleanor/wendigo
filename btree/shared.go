@@ -50,7 +50,7 @@ type BtShared struct {
 	pTmpSpace		[]byte				//	BtShared.pageSize bytes of space for tmp use
 }
 
-//	Allowed values for BtShared.Flags	
+//	Allowed values for BtShared.Flags
 const(
 	BTS_READ_ONLY			= 0x0001	//	Underlying file is readonly
 	BTS_PAGESIZE_FIXED		= 0x0002	//	Page size can no longer be changed
@@ -64,7 +64,7 @@ const(
 //	Get a page from the pager. Initialize the MemoryPage.pBt and MemoryPage.aData elements if needed.
 //
 //	If the noContent flag is set, it means that we do not care about the content of the page at this time. So do not go to the disk
-//	to fetch the content. Just fill in the content with zeros for now. If in the future we call sqlite3PagerWrite() on this page, that
+//	to fetch the content. Just fill in the content with zeros for now. If in the future we call DbPage::Write() on this page, that
 //	means we have started to be concerned about content and the disk read should occur at that point.
 
 func (pBt *BtShared) GetPage(pgno PageNumber, noContent bool) (ppPage MemoryPage, rc int) {

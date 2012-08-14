@@ -1,17 +1,9 @@
 //	Attempt to release up to n bytes of non-essential memory currently held by SQLite. An example of non-essential memory is memory used to cache database pages that are not currently in use.
 func ReleaseMemory(int n) int {
-#ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
 	return sqlite3PcacheReleaseMemory(n)
-#else
-	//	IMPLEMENTATION-OF: R-34391-24921 The ReleaseMemory() routine is a no-op returning zero if SQLite is not compiled with SQLITE_ENABLE_MEMORY_MANAGEMENT.
-	return 0
-#endif
 }
 
-/*
-** An instance of the following object records the location of
-** each unused scratch buffer.
-*/
+//	An instance of the following object records the location of each unused scratch buffer.
 typedef struct ScratchFreeslot {
   struct ScratchFreeslot *Next;   /* Next unused scratch buffer */
 } ScratchFreeslot;
@@ -42,7 +34,7 @@ static struct Mem0Global {
   ScratchFreeslot *pScratchFree;
   uint32 nScratchFree;
 
-  //	True if heap is nearly "full" where "full" is defined by the sqlite3_soft_heap_limit64() setting.
+  //	True if heap is nearly "full" where "full" is defined by the SetHeapLimit() setting.
   int nearlyFull;
 } mem0 = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
@@ -52,7 +44,7 @@ static struct Mem0Global {
 ** limit.
 */
 static void softHeapLimitEnforcer(
-  void *NotUsed, 
+  void *NotUsed,
   int64 NotUsed2,
   int allocSize
 ){
@@ -78,25 +70,23 @@ static int sqlite3MemoryAlarm(
   return SQLITE_OK;
 }
 
-/*
-** Set the soft heap-size limit for the library. Passing a zero or 
-** negative value indicates no limit.
-*/
-func int64 sqlite3_soft_heap_limit64(int64 n){
-  int64 priorLimit;
-  int64 excess;
-  mem0.mutex.Lock()
-  priorLimit = mem0.alarmThreshold;
-  mem0.mutex.Unlock()
-  if( n<0 ) return priorLimit;
-  if( n>0 ){
-    sqlite3MemoryAlarm(softHeapLimitEnforcer, 0, n);
-  }else{
-    sqlite3MemoryAlarm(0, 0, 0);
-  }
-  excess = sqlite3_memory_used() - n;
-  if( excess>0 ) ReleaseMemory((int)(excess & 0x7fffffff));
-  return priorLimit;
+//	Set the soft heap-size limit for the library. Passing a zero or negative value indicates no limit.
+func SetHeapLimit(n int64) (priorLimit int64) {
+	mem0.mutex.CriticalSection(func() {
+		priorLimit = mem0.alarmThreshold
+	})
+	switch {
+	case n < 0:
+		return priorLimit
+	case n > 0:
+		sqlite3MemoryAlarm(softHeapLimitEnforcer, 0, n)
+	default:
+		sqlite3MemoryAlarm(0, 0, 0)
+	}
+	if excess := MemoryUsed() - n; excess > 0 {
+		ReleaseMemory(int(excess & 0x7fffffff))
+	}
+	return
 }
 
 /*
@@ -141,48 +131,32 @@ func int64 sqlite3_soft_heap_limit64(int64 n){
   return sqlite3GlobalConfig.m.xInit(sqlite3GlobalConfig.m.pAppData);
 }
 
-//	Return true if the heap is currently under memory pressure - in other words if the amount of heap used is close to the limit set by	sqlite3_soft_heap_limit64().
- int sqlite3HeapNearlyFull(void){
-  return mem0.nearlyFull;
+//	Return true if the heap is currently under memory pressure - in other words if the amount of heap used is close to the limit set by	SetHeapLimit().
+func IsHeapNearlyFull() bool {
+	return mem0.nearlyFull
 }
 
-/*
-** Deinitialize the memory allocation subsystem.
-*/
- void sqlite3MallocEnd(void){
+//	Deinitialize the memory allocation subsystem.
+void sqlite3MallocEnd(void){
   if( sqlite3GlobalConfig.m.xShutdown ){
     sqlite3GlobalConfig.m.xShutdown(sqlite3GlobalConfig.m.pAppData);
   }
   memset(&mem0, 0, sizeof(mem0));
 }
 
-/*
-** Return the amount of memory currently checked out.
-*/
-func int64 sqlite3_memory_used(void){
-  int n, mx;
-  int64 res;
-  sqlite3_status(SQLITE_STATUS_MEMORY_USED, &n, &mx, 0);
-  res = (int64)n;  /* Work around bug in Borland C. Ticket #3216 */
-  return res;
+//	Return the amount of memory currently checked out.
+func MemoryUsed() int64 {
+	n, _, _ := Status(SQLITE_STATUS_MEMORY_USED, false)
+	return int64(n)
 }
 
-/*
-** Return the maximum amount of memory that has ever been
-** checked out since either the beginning of this process
-** or since the most recent reset.
-*/
-func int64 sqlite3_memory_highwater(int resetFlag){
-  int n, mx;
-  int64 res;
-  sqlite3_status(SQLITE_STATUS_MEMORY_USED, &n, &mx, resetFlag);
-  res = (int64)mx;  /* Work around bug in Borland C. Ticket #3216 */
-  return res;
+//	Return the maximum amount of memory that has ever been checked out since either the beginning of this process or since the most recent reset.
+func MemoryHighwater(resetFlag bool) int64 {
+	_, mx, _ := Status(SQLITE_STATUS_MEMORY_USED, resetFlag)
+	return int64(mx)
 }
 
-/*
-** Trigger the alarm 
-*/
+//	Trigger the alarm
 static void sqlite3MallocAlarm(int nByte){
   void (*xCallback)(void*,int64,int);
   int64 nowUsed;
@@ -218,12 +192,10 @@ static int mallocWithAlarm(int n, void **pp){
     }
   }
   p = sqlite3GlobalConfig.m.xMalloc(nFull);
-#ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
   if( p==0 && mem0.alarmCallback ){
     sqlite3MallocAlarm(nFull);
     p = sqlite3GlobalConfig.m.xMalloc(nFull);
   }
-#endif
   if( p ){
     nFull = sqlite3MallocSize(p);
     sqlite3StatusAdd(SQLITE_STATUS_MEMORY_USED, nFull);
@@ -239,7 +211,7 @@ static int mallocWithAlarm(int n, void **pp){
 */
  void *sqlite3Malloc(int n){
   void *p;
-  if( n<=0               /* IMP: R-65312-04917 */ 
+  if( n<=0               /* IMP: R-65312-04917 */
    || n>=0x7fffff00
   ){
     /* A memory allocation of a number of bytes which is near the maximum
@@ -368,7 +340,7 @@ void *sqlite3Realloc(void *pOld, int nBytes){
     mem0.mutex.Lock()
     sqlite3StatusSet(SQLITE_STATUS_MALLOC_SIZE, nBytes);
     nDiff = nNew - nOld;
-    if( sqlite3StatusValue(SQLITE_STATUS_MEMORY_USED) >= 
+    if( sqlite3StatusValue(SQLITE_STATUS_MEMORY_USED) >=
           mem0.alarmThreshold-nDiff ){
       sqlite3MallocAlarm(nDiff);
     }
@@ -400,7 +372,7 @@ func void *sqlite3_realloc(void *pOld, int n){
 
 /*
 ** Allocate and zero memory.
-*/ 
+*/
  void *sqlite3MallocZero(int n){
   void *p = sqlite3Malloc(n);
   if( p ){
@@ -484,9 +456,9 @@ void *sqlite3DbReallocOrFree(sqlite3 *db, void *p, int n){
 }
 
 /*
-** Make a copy of a string in memory obtained from sqliteMalloc(). These 
+** Make a copy of a string in memory obtained from sqliteMalloc(). These
 ** functions call sqlite3MallocRaw() directly instead of sqliteMalloc(). This
-** is because when memory debugging is turned on, these two functions are 
+** is because when memory debugging is turned on, these two functions are
 ** called via macros that record the current file and line number in the
 ** ThreadData structure.
 */
@@ -519,7 +491,7 @@ void *sqlite3DbReallocOrFree(sqlite3 *db, void *p, int n){
 }
 
 //	This function must be called before exiting any API function (i.e. returning control to the user) that has called sqlite3_malloc or sqlite3_realloc.
-//	The returned value is normally a copy of the second argument to this function. However, if a malloc() failure has occurred since the previous invocation SQLITE_NOMEM is returned instead. 
+//	The returned value is normally a copy of the second argument to this function. However, if a malloc() failure has occurred since the previous invocation SQLITE_NOMEM is returned instead.
 //	If the first argument, db, is not NULL and a malloc() error has occurred, then the connection error-code (the value returned by sqlite3_errcode()) is set to SQLITE_NOMEM.
 func (db *sqlite3) ApiExit(rc int) int {
 	//	If the db handle is not NULL, then we must hold the connection handle mutex here. Otherwise the read (and possible write) of db.mallocFailed is unsafe, as is the call to Error().

@@ -60,13 +60,14 @@ static int fts3auxConnectMethod(
     return SQLITE_ERROR;
   }
 
-  zDb = argv[1]; 
+  zDb = argv[1];
   nDb = len(zDb)
   zFts3 = argv[3];
   nFts3 = len(zFts3)
 
-  rc = sqlite3_declare_vtab(db, FTS3_TERMS_SCHEMA);
-  if( rc!=SQLITE_OK ) return rc;
+  if rc = db.DeclareVTab(FTS3_TERMS_SCHEMA); rc != SQLITE_OK {
+	  return rc
+  }
 
   nByte = sizeof(Fts3auxTable) + sizeof(Fts3Table) + nDb + nFts3 + 2;
   p = (Fts3auxTable *)sqlite3_malloc(nByte);
@@ -114,7 +115,7 @@ static int fts3auxDisconnectMethod(sqlite3_vtab *pVtab){
 ** xBestIndex - Analyze a WHERE and ORDER BY clause.
 */
 static int fts3auxBestIndexMethod(
-  sqlite3_vtab *pVTab, 
+  sqlite3_vtab *pVTab,
   sqlite3_index_info *pInfo
 ){
   int i;
@@ -123,8 +124,8 @@ static int fts3auxBestIndexMethod(
   int iLe = -1;
 
   /* This vtab delivers always results in "ORDER BY term ASC" order. */
-  if( pInfo.nOrderBy==1 
-   && pInfo.aOrderBy[0].iColumn==0 
+  if( pInfo.nOrderBy==1
+   && pInfo.aOrderBy[0].iColumn==0
    && pInfo.aOrderBy[0].desc==0
   ){
     pInfo.orderByConsumed = 1;
@@ -197,11 +198,11 @@ static int fts3auxCloseMethod(sqlite3_vtab_cursor *pCursor){
 static int fts3auxGrowStatArray(Fts3auxCursor *pCsr, int nSize){
   if( nSize>pCsr.nStat ){
     struct Fts3auxColstats *aNew;
-    aNew = (struct Fts3auxColstats *)sqlite3_realloc(pCsr.aStat, 
+    aNew = (struct Fts3auxColstats *)sqlite3_realloc(pCsr.aStat,
         sizeof(struct Fts3auxColstats) * nSize
     );
     if( aNew==0 ) return SQLITE_NOMEM;
-    memset(&aNew[pCsr.nStat], 0, 
+    memset(&aNew[pCsr.nStat], 0,
         sizeof(struct Fts3auxColstats) * (nSize - pCsr.nStat)
     );
     pCsr.aStat = aNew;
@@ -261,8 +262,8 @@ static int fts3auxNextMethod(sqlite3_vtab_cursor *pCursor){
 
         /* State 1. In this state we are expecting either a 1, indicating
         ** that the following integer will be a column number, or the
-        ** start of a position list for column 0.  
-        ** 
+        ** start of a position list for column 0.
+        **
         ** The only difference between state 1 and state 2 is that if the
         ** integer encountered in state 1 is not 0 or 1, then we need to
         ** increment the column 0 "nDoc" count for this term.

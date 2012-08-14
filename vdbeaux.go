@@ -957,7 +957,7 @@ func (p *Vdbe) Rewind() {
   ** cursor 0 is stored in memory cell nMem. Memory cell (nMem-1)
   ** stores the blob of memory associated with cursor 1, etc.
   **
-  ** See also: allocateCursor().
+  ** See also: Vdbe::allocateCursor().
   */
   nMem += nCursor;
 

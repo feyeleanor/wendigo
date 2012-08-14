@@ -6,7 +6,7 @@
 
 
 /*
-** An array of names of all compile-time options.  This array should 
+** An array of names of all compile-time options.  This array should
 ** be sorted A-Z.
 **
 ** This array looks large, but in a typical installation actually uses
@@ -44,9 +44,7 @@ static const char * const azCompileOpt[] = {
 #ifdef SQLITE_ENABLE_CEROD
   "ENABLE_CEROD",
 #endif
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
   "ENABLE_COLUMN_METADATA",
-#endif
 #ifdef SQLITE_ENABLE_EXPENSIVE_ASSERT
   "ENABLE_EXPENSIVE_ASSERT",
 #endif
@@ -71,9 +69,7 @@ static const char * const azCompileOpt[] = {
 #ifdef SQLITE_ENABLE_LOAD_EXTENSION
   "ENABLE_LOAD_EXTENSION",
 #endif
-#ifdef SQLITE_ENABLE_MEMORY_MANAGEMENT
   "ENABLE_MEMORY_MANAGEMENT",
-#endif
 #ifdef SQLITE_ENABLE_OVERSIZE_CELL_CHECK
   "ENABLE_OVERSIZE_CELL_CHECK",
 #endif
@@ -136,9 +132,6 @@ static const char * const azCompileOpt[] = {
 #endif
 #ifdef SQLITE_OMIT_DATETIME_FUNCS
   "OMIT_DATETIME_FUNCS",
-#endif
-#ifdef SQLITE_OMIT_DECLTYPE
-  "OMIT_DECLTYPE",
 #endif
   "OMIT_DEPRECATED",
 #ifdef SQLITE_OMIT_EXPLAIN

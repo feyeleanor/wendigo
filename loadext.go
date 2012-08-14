@@ -7,7 +7,7 @@
 /* This header file defines the SQLite interface for use by
 ** shared libraries that want to be imported as extensions into
 ** an SQLite instance.  Shared libraries that intend to be loaded
-** as extensions by SQLite should #include this file instead of 
+** as extensions by SQLite should #include this file instead of
 ** sqlite3.h.
 */
 
@@ -227,24 +227,9 @@ struct sqlite3_api_routines {
 
 #ifndef SQLITE_OMIT_LOAD_EXTENSION
 
-/*
-** Some API routines are omitted when various features are
-** excluded from a build of SQLite.  Substitute a NULL pointer
-** for any missing APIs.
-*/
-#ifndef SQLITE_ENABLE_COLUMN_METADATA
-# define sqlite3_column_database_name   0
-# define sqlite3_column_table_name      0
-# define sqlite3_column_origin_name     0
-# define sqlite3_table_column_metadata  0
-#endif
-
+//	Some API routines are omitted when various features are excluded from a build of SQLite.  Substitute a NULL pointer for any missing APIs.
 #ifdef SQLITE_OMIT_COMPLETE
 # define sqlite3_complete 0
-#endif
-
-#ifdef SQLITE_OMIT_DECLTYPE
-# define sqlite3_column_decltype        0
 #endif
 
 #ifdef SQLITE_OMIT_TRACE
@@ -306,7 +291,7 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_create_function,
   sqlite3_data_count,
   sqlite3_db_handle,
-  sqlite3_declare_vtab,
+  DeclareVTab,
   sqlite3_errcode,
   sqlite3_errmsg,
   sqlite3_exec,
@@ -338,7 +323,7 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_set_authorizer,
   sqlite3_set_auxdata,
   sqlite3_step,
-  sqlite3_table_column_metadata,
+  TableColumnMetadata,
   0,
   sqlite3_total_changes,
   sqlite3_trace,
@@ -366,14 +351,14 @@ static const sqlite3_api_routines sqlite3Apis = {
   ** Added for 3.5.0
   */
   sqlite3_blob_bytes,
-  sqlite3_blob_close,
+  Close,
   sqlite3_blob_open,
   sqlite3_blob_read,
   sqlite3_blob_write,
   sqlite3_create_collation_v2,
   sqlite3_file_control,
-  sqlite3_memory_highwater,
-  sqlite3_memory_used,
+  MemoryHighwater,
+  MemoryUsed,
   sqlite3_mutex_alloc,
   sqlite3_open_v2,
   ReleaseMemory,
@@ -397,7 +382,7 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_limit,
   sqlite3_next_stmt,
   sqlite3_sql,
-  sqlite3_status,
+  Status,
 
   /*
   ** Added for 3.7.4
@@ -417,7 +402,7 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_db_status,
   sqlite3_extended_errcode,
   sqlite3_log,
-  sqlite3_soft_heap_limit64,
+  SetHeapLimit,
   sqlite3_sourceid,
   sqlite3_stmt_status,
   unlock_notify,
@@ -443,7 +428,7 @@ static const sqlite3_api_routines sqlite3Apis = {
 **
 ** Return SQLITE_OK on success and SQLITE_ERROR if something goes wrong.
 **
-** If an error occurs and pzErrMsg is not 0, then fill *pzErrMsg with 
+** If an error occurs and pzErrMsg is not 0, then fill *pzErrMsg with
 ** error message text.
 */
 static int sqlite3LoadExtension(
@@ -587,7 +572,7 @@ static const sqlite3_api_routines sqlite3Apis = { 0 };
 */
 typedef struct sqlite3AutoExtList sqlite3AutoExtList;
 static struct sqlite3AutoExtList {
-  int nExt;              /* Number of entries in aExt[] */          
+  int nExt;              /* Number of entries in aExt[] */
   void (**aExt)(void);   /* Pointers to the extension init functions */
 } sqlite3Autoext = { 0, 0 };
 

@@ -1,6 +1,6 @@
 //	This VDBE program seeks a btree cursor to the identified db/table/row entry. The reason for using a vdbe program instead of writing code to use the b-tree layer directly is that the vdbe program will take advantage of the various transaction, locking and error handling infrastructure built into the vdbe.
 // After seeking the cursor, the vdbe executes an OP_ResultRow. Code external to the Vdbe then "borrows" the b-tree cursor and uses it to implement the blob_read(), blob_write() and blob_bytes() functions.
-//	The sqlite3_blob_close() function finalizes the vdbe program, which closes the b-tree cursor and (possibly) commits the transaction.
+//	The sqlite3_blob::Close() function finalizes the vdbe program, which closes the b-tree cursor and (possibly) commits the transaction.
 const OPEN_BLOB []VdbeOpList = {
 	{OP_Transaction, 0, 0, 0},				//	0: Start a transaction
 	{OP_VerifyCookie, 0, 0, 0},				//	1: Check the schema cookie

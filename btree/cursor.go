@@ -4,7 +4,7 @@ package btree
 //	The entry is identified by its MemoryPage and the index in MemoryPage.CellIndices[] of the entry.
 //	A single database file can be shared by two more database connections, but cursors cannot be shared.  Each cursor is associated with a
 //	particular database connection identified Cursor.pBtree.db.
-//	Fields in this structure are accessed under the BtShared.mutex found at self.pBt.mutex. 
+//	Fields in this structure are accessed under the BtShared.mutex found at self.pBt.mutex.
 struct Cursor {
 	pBtreee				*Btree			//	The Btree to which this cursor belongs
 	pBt					*BtShared		//	The BtShared this cursor points to
@@ -91,11 +91,11 @@ func (pCur *Cursor) Balance() (rc int) {
 			MemoryPage * const pParent = pCur.Pages[iPage-1]
 			int const iIdx = pCur.aiIdx[iPage-1]
 
-			rc = sqlite3PagerWrite(pParent.pDbPage)
+			rc = pParent.DbPage.Write()
 			if rc == SQLITE_OK {
-				if pPage.hasData && pPage.nOverflow == 1 && pPage.aiOvfl[0] == pPage.nCell && pParent.pgno != 1 && pParent.nCell == iIdx) {
+				if pPage.HasData && pPage.nOverflow == 1 && pPage.aiOvfl[0] == pPage.nCell && pParent.pgno != 1 && pParent.nCell == iIdx) {
 					//	Call balance_quick() to create a new sibling of pPage on which to store the overflow cell. balance_quick() inserts a new cell
-					//	into pParent, which may cause pParent overflow. If this happens, the next interation of the do-loop will balance pParent 
+					//	into pParent, which may cause pParent overflow. If this happens, the next interation of the do-loop will balance pParent
 					//	use either BalanceNonroot() or balance_deeper(). Until this happens, the overflow cell is stored in the aBalanceQuickSpace[] buffer.
 					//
 					//	The purpose of the following assert() is to check that only a single call to balance_quick() is made for each call to this
@@ -107,10 +107,10 @@ func (pCur *Cursor) Balance() (rc int) {
 					//	modifying the contents of pParent, which may cause pParent to become overfull or underfull. The next iteration of the do-loop
 					//	will balance the parent page to correct this.
 					//
-					//	If the parent page becomes overfull, the overflow cell or cells are stored in the pSpace buffer allocated immediately below. 
+					//	If the parent page becomes overfull, the overflow cell or cells are stored in the pSpace buffer allocated immediately below.
 					//	A subsequent iteration of the do-loop will deal with this by calling BalanceNonroot() (balance_deeper() may be called first,
-					//	but it doesn't deal with overflow cells - just moves them to a different page). Once this subsequent call to BalanceNonroot() 
-					//	has completed, it is safe to release the pSpace buffer used by the previous call, as the overflow cell data will have been 
+					//	but it doesn't deal with overflow cells - just moves them to a different page). Once this subsequent call to BalanceNonroot()
+					//	has completed, it is safe to release the pSpace buffer used by the previous call, as the overflow cell data will have been
 					//	copied either into the body of a database page or into the new pSpace buffer passed to the latter call to BalanceNonroot().
 					byte *pSpace = sqlite3PageMalloc(pCur.pBt.pageSize)
 					rc = pParent.BalanceNonroot(iIdx, pSpace, iPage == 1)
@@ -144,7 +144,7 @@ func (pCur *Cursor) Balance() (rc int) {
 //	Move the cursor down to a new child page. The newPageNumber argument is the page number of the child page to move to.
 //
 //	This function returns SQLITE_CORRUPT if the page-header flags field of the new child page does not match the flags field of the parent (i.e.
-//	if an intkey page appears to be the parent of a non-intkey page, or vice-versa).
+//	if an IsIntegerKey page appears to be the parent of a non-IsIntegerKey page, or vice-versa).
 
 func (pCur *Cursor) MoveToChild(newPageNumber uint32) (rc int) {
 	pNewPage	*MemoryPage
@@ -164,7 +164,7 @@ func (pCur *Cursor) MoveToChild(newPageNumber uint32) (rc int) {
 
 			pCur.CellInfo.nSize = 0
 			pCur.validNKey = 0
-			if pNewPage.nCell < 1 || pNewPage.intKey != pCur.Pages[i].intKey {
+			if pNewPage.nCell < 1 || pNewPage.IsIntegerKey != pCur.Pages[i].IsIntegerKey {
 				rc = SQLITE_CORRUPT_BKPT
 			}
 		}
@@ -173,121 +173,103 @@ func (pCur *Cursor) MoveToChild(newPageNumber uint32) (rc int) {
 }
 
 
-/*
-** Delete the entry that the cursor is pointing to.  The cursor
-** is left pointing at a arbitrary location.
-*/
- int sqlite3BtreeDelete(Cursor *pCur){
-  Btree *p = pCur.pBtree;
-  BtShared *pBt = p.pBt;              
-  int rc;                              /* Return code */
-  MemoryPage *pPage;                      /* Page to delete cell from */
-  unsigned char *pCell;                /* Pointer to cell to delete */
-  int iCellIdx;                        /* Index of cell to delete */
-  int iCellDepth;                      /* Depth of node containing pCell */ 
+//	Delete the entry that the cursor is pointing to. The cursor is left pointing at a arbitrary location.
+func (pCur *Cursor) Delete() (rc int) {
+int sqlite3BtreeDelete(Cursor *pCur){
+	p := pCur.pBtree
+	pBt = p.pBt
 
-  assert( pBt.inTransaction==TRANS_WRITE );
-  assert( (pBt.Flags & BTS_READ_ONLY)==0 );
-  assert( pCur.Writable );
-  assert( hasSharedCacheTableLock(p, pCur.RootPage, pCur.pKeyInfo!=0, 2) );
-  assert( !hasReadConflicts(p, pCur.RootPage) );
+	MemoryPage *pPage;                      /* Page to delete cell from */
+	unsigned char *pCell;                /* Pointer to cell to delete */
+	int iCellIdx;                        /* Index of cell to delete */
+	int iCellDepth;                      /* Depth of node containing pCell */
 
-  if( pCur.aiIdx[pCur.iPage]>=pCur.Pages[pCur.iPage].nCell || pCur.eState!=CURSOR_VALID){
-    return SQLITE_ERROR;  /* Something has gone awry. */
-  }
+	assert( pBt.inTransaction == TRANS_WRITE )
+	assert( pBt.Flags & BTS_READ_ONLY == 0 )
+	assert( pCur.Writable )
+	assert( hasSharedCacheTableLock(p, pCur.RootPage, pCur.pKeyInfo != 0, 2) )
+	assert( !hasReadConflicts(p, pCur.RootPage) )
 
-  iCellDepth = pCur.iPage;
-  iCellIdx = pCur.aiIdx[iCellDepth];
-  pPage = pCur.Pages[iCellDepth];
-  pCell = pPage.FindCell(iCellIdx)
+	if pCur.aiIdx[pCur.iPage] >= pCur.Pages[pCur.iPage].nCell || pCur.eState!=CURSOR_VALID {
+		return SQLITE_ERROR;  /* Something has gone awry. */
+	}
 
-  /* If the page containing the entry to delete is not a leaf page, move
-  ** the cursor to the largest entry in the tree that is smaller than
-  ** the entry being deleted. This cell will replace the cell being deleted
-  ** from the internal node. The 'previous' entry is used for this instead
-  ** of the 'next' entry, as the previous entry is always a part of the
-  ** sub-tree headed by the child page of the cell being deleted. This makes
-  ** balancing the tree following the delete operation easier.  */
-  if( !pPage.leaf ){
-    int notUsed;
-    rc = sqlite3BtreePrevious(pCur, &notUsed);
-    if( rc ) return rc;
-  }
+	iCellDepth = pCur.iPage
+	iCellIdx = pCur.aiIdx[iCellDepth]
+	pPage = pCur.Pages[iCellDepth]
+	pCell = pPage.FindCell(iCellIdx)
 
-  /* Save the positions of any other cursors open on this table before
-  ** making any modifications. Make the page containing the entry to be 
-  ** deleted writable. Then free any overflow pages associated with the 
-  ** entry and finally remove the cell itself from within the page.  
-  */
-  rc = saveAllCursors(pBt, pCur.RootPage, pCur);
-  if( rc ) return rc;
-
-  /* If this is a delete operation to remove a row from a table b-tree,
-  ** invalidate any incrblob cursors open on the row being deleted.  */
-  if( pCur.pKeyInfo==0 ){
-    p.InvalidateIncrblobCursors(pCur.CellInfo.nKey, false)
-  }
-
-  rc = sqlite3PagerWrite(pPage.pDbPage);
-  if( rc ) return rc;
-  rc = clearCell(pPage, pCell);
-  dropCell(pPage, iCellIdx, pPage.cellSize(pCell), &rc)
-  if( rc ) return rc;
-
-  /* If the cell deleted was not located on a leaf page, then the cursor
-  ** is currently pointing to the largest entry in the sub-tree headed
-  ** by the child-page of the cell that was just deleted from an internal
-  ** node. The cell from the leaf node needs to be moved to the internal
-  ** node to replace the deleted cell.  */
-  if( !pPage.leaf ){
-    MemoryPage *pLeaf = pCur.Pages[pCur.iPage];
-    int nCell;
-    PageNumber n = pCur.Pages[iCellDepth+1].pgno;
-    unsigned char *pTmp;
-
-    pCell = pLeaf.FindCell(pLeaf.nCell - 1)
-    nCell = pLeaf.cellSize(pCell)
-    assert( MX_CELL_SIZE(pBt) >= nCell );
-
-    allocateTempSpace(pBt);
-    pTmp = pBt.pTmpSpace;
-
-    if rc = sqlite3PagerWrite(pLeaf.pDbPage); rc == SQLITE_OK {
-		//	TODO:	pCell needs to point to memory 4 bytes before its start in the page
-		if rc = pPage.InsertCell(iCellIdx, pCell[-4:], pTmp, n); rc == SQLITE_OK {
-			dropCell(pLeaf, pLeaf.nCell-1, nCell, &rc)
+	//	If the page containing the entry to delete is not a IsLeaf page, move the cursor to the largest entry in the tree that is smaller than the entry being deleted. This cell will replace the cell being deleted from the internal node. The 'previous' entry is used for this instead of the 'next' entry, as the previous entry is always a part of the sub-tree headed by the child page of the cell being deleted. This makes balancing the tree following the delete operation easier.
+	if !pPage.IsLeaf {
+		int notUsed;
+		if rc = sqlite3BtreePrevious(pCur, &notUsed) {
+			return
 		}
 	}
-    if rc != SQLITE_OK {
-		return rc
+
+	//	Save the positions of any other cursors open on this table before making any modifications. Make the page containing the entry to be deleted writable. Then free any overflow pages associated with the entry and finally remove the cell itself from within the page.
+	if rc = saveAllCursors(pBt, pCur.RootPage, pCur); rc != SQLITE_OK {
+		return
 	}
-  }
 
-  /* Balance the tree. If the entry deleted was located on a leaf page,
-  ** then the cursor still points to that page. In this case the first
-  ** call to Balance() repairs the tree, and the if(...) condition is
-  ** never true.
-  **
-  ** Otherwise, if the entry deleted was on an internal node page, then
-  ** pCur is pointing to the leaf page from which a cell was removed to
-  ** replace the cell deleted from the internal node. This is slightly
-  ** tricky as the leaf node may be underfull, and the internal node may
-  ** be either under or overfull. In this case run the balancing algorithm
-  ** on the leaf node first. If the balance proceeds far enough up the
-  ** tree that we can be sure that any problem in the internal node has
-  ** been corrected, so be it. Otherwise, after balancing the leaf node,
-  ** walk the cursor up the tree to the internal node and balance it as 
-  ** well.  */
-  rc = pCur.Balance()
-  if( rc==SQLITE_OK && pCur.iPage>iCellDepth ){
-    while( pCur.iPage>iCellDepth ){
-      pCur.Pages[pCur.iPage--].Release()
-    }
-    rc = pCur.Balance()
-  }
+	//	If this is a delete operation to remove a row from a table b-tree, invalidate any incrblob cursors open on the row being deleted.
+	if pCur.pKeyInfo == nil {
+		p.InvalidateIncrblobCursors(pCur.CellInfo.nKey, false)
+	}
 
-  if( rc==SQLITE_OK ){
-    pCur.MoveToRoot()
-  }
-  return rc;
+	if rc = pPage.DbPage.Write(); rc != SQLITE_OK {
+		return
+	}
+	rc = clearCell(pPage, pCell)
+	if dropCell(pPage, iCellIdx, pPage.cellSize(pCell), &rc); rc != SQLITE_OK {
+		return
+	}
+
+	//	If the cell deleted was not located on a IsLeaf page, then the cursor is currently pointing to the largest entry in the sub-tree headed by the child-page of the cell that was just deleted from an internal node. The cell from the IsLeaf node needs to be moved to the internal node to replace the deleted cell.
+	if !pPage.IsLeaf {
+		pIsLeaf := pCur.Pages[pCur.iPage]
+		int nCell
+		n := pCur.Pages[iCellDepth + 1].pgno
+		unsigned char *pTmp
+
+		pCell = pIsLeaf.FindCell(pIsLeaf.nCell - 1)
+		nCell = pIsLeaf.cellSize(pCell)
+		assert( MX_CELL_SIZE(pBt) >= nCell )
+
+		allocateTempSpace(pBt)
+		pTmp = pBt.pTmpSpace
+
+		if rc = pIsLeaf.DbPage.Write(); rc == SQLITE_OK {
+			//	TODO:	pCell needs to point to memory 4 bytes before its start in the page
+			if rc = pPage.InsertCell(iCellIdx, pCell[-4:], pTmp, n); rc == SQLITE_OK {
+				dropCell(pIsLeaf, pIsLeaf.nCell - 1, nCell, &rc)
+			}
+		}
+		if rc != SQLITE_OK {
+			return
+		}
+	}
+
+	//	Balance the tree. If the entry deleted was located on a IsLeaf page, then the cursor still points to that page. In this case the first call to Balance() repairs the tree, and the if(...) condition is never true.
+	//	Otherwise, if the entry deleted was on an internal node page, then pCur is pointing to the IsLeaf page from which a cell was removed to replace the cell deleted from the internal node. This is slightly tricky as the IsLeaf node may be underfull, and the internal node may be either under or overfull. In this case run the balancing algorithm on the IsLeaf node first. If the balance proceeds far enough up the tree that we can be sure that any problem in the internal node has been corrected, so be it. Otherwise, after balancing the IsLeaf node, walk the cursor up the tree to the internal node and balance it as well.
+	if rc = pCur.Balance(); rc == SQLITE_OK && pCur.iPage > iCellDepth {
+		for pCur.iPage > iCellDepth {
+			pCur.iPage--
+			pCur.Pages[pCur.iPage].Release()
+		}
+		rc = pCur.Balance()
+	}
+	if rc == SQLITE_OK {
+		pCur.MoveToRoot()
+	}
+	return
+}
+
+//	Set a flag on this cursor to cache the locations of pages from the overflow list for the current row. This is used by cursors opened for incremental blob IO only.
+//	This function sets a flag only. The actual page location cache (stored in Cursor.OverflowCache[]) is allocated and used by function accessPayload() (the worker function for sqlite3BtreeData() and sqlite3BtreePutData()).
+func (c *Cursor) CacheOverflow() {
+	c.CriticalSection(func() {
+		c.OverflowCache = nil
+		c.isIncrblobHandle = 1
+	})
 }

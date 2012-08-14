@@ -249,24 +249,24 @@ const(
 
 //	A bunch of assert() statements to check the transaction state variables of handle p (type Btree*) are internally consistent.
 func (p *Btree) EnforceIntegrity() {
-	assert(p.pBt.inTransaction != TRANS_NONE || p.pBt.nTransaction == 0)
-	assert(p.pBt.inTransaction >= p.inTrans)
+	assert(p.BtShared.inTransaction != TRANS_NONE || p.BtShared.nTransaction == 0)
+	assert(p.BtShared.inTransaction >= p.inTrans)
 }
 
 
 //	Obtain the BtShared mutex associated with B-Tree handle p. Also, set BtShared.db to the database handle associated with p and the p.locked boolean to true.
 func (p *Btree) Lock() {
 	assert(!p.locked)
-	p.pBt.mutex.Lock()
-	p.pBt.db = p.db
+	p.BtShared.mutex.Lock()
+	p.BtShared.db = p.db
 	p.locked = true
 }
 
 //	Release the BtShared mutex associated with B-Tree handle p and clear the p.locked boolean.
 func (p *Btree) Unlock() {
 	assert(p.Locked)
-	assert(p.db == p.pBt.db)
-	p.pBt.mutex.Unlock()
+	assert(p.db == p.BtShared.db)
+	p.BtShared.mutex.Unlock()
 	p.locked = false
 }
 
@@ -284,9 +284,9 @@ func (p *Btree) Lock() {
 	pLater	*Btree
 
 	//	Some basic sanity checking on the Btree. The list of Btrees connected by Next and pPrev should be in sorted order by
-	//	Btree.pBt value. All elements of the list should belong to the same connection. Only shared Btrees are on the list.
-	assert(p.Next == 0 || p.Next.pBt > p.pBt)
-	assert(p.pPrev == 0 || p.pPrev.pBt < p.pBt)
+	//	Btree.BtShared value. All elements of the list should belong to the same connection. Only shared Btrees are on the list.
+	assert(p.Next == 0 || p.Next.BtShared > p.BtShared)
+	assert(p.pPrev == 0 || p.pPrev.BtShared < p.BtShared)
 	assert(p.Next == 0 || p.Next.db == p.db)
 	assert(p.pPrev == 0 || p.pPrev.db == p.db)
 	assert(p.sharable || (p.Next == 0 && p.pPrev == 0))
@@ -298,7 +298,7 @@ func (p *Btree) Lock() {
 	//	We should already hold a lock on the database connection
 
 	//	Unless the database is sharable and unlocked, then BtShared.db should already be set correctly.
-	assert((!p.locked && p.sharable) || p.pBt.db == p.db)
+	assert((!p.locked && p.sharable) || p.BtShared.db == p.db)
 
 	if !p.sharable {
 		return
@@ -309,8 +309,8 @@ func (p *Btree) Lock() {
 	}
 
 	//	In most cases, we should be able to acquire the lock we want without having to go throught the ascending lock procedure that follows. Just be sure not to block.
-	if p.pBt.mutex.TestLock() == SQLITE_OK {
-		p.pBt.db = p.db
+	if p.BtShared.mutex.TestLock() == SQLITE_OK {
+		p.BtShared.db = p.db
 		p.locked = true
 		return
 	}
@@ -318,7 +318,7 @@ func (p *Btree) Lock() {
 	//	To avoid deadlock, first release all locks with a larger BtShared address. Then acquire our lock. Then reacquire the other BtShared locks that we used to hold in ascending order.
 	for pLater = p.Next; pLater; pLater = pLater.Next {
 		assert(pLater.sharable)
-		assert(pLater.Next == 0 || pLater.Next.pBt > pLater.pBt)
+		assert(pLater.Next == 0 || pLater.Next.BtShared > pLater.BtShared)
 		assert(!pLater.locked || pLater.wantToLock > 0)
 		if pLater.locked {
 			pLater.Unlock()
@@ -362,7 +362,7 @@ func (p *Cursor) Unlock() {
 
 func (p *Cursor) CriticalSection(f func()) {
 	defer p.Unlock()
-	Lock()
+	p.Lock()
 	f()
 }
 
@@ -373,20 +373,26 @@ func (p *Cursor) CriticalSection(f func()) {
 //
 //	Enter the mutexes in accending order by BtShared pointer address to avoid the possibility of deadlock when two threads with two or more btrees in common both
 //	try to lock all their btrees at the same instant.
-func (db *sqlite3) LockAll() {
+func (db *sqlite3) Lock() {
 	for _, database := range db.Databases {
-		if database.pBt != nil {
-			database.pBt.Lock()
+		if database.BtShared != nil {
+			database.BtShared.Lock()
 		}
 	}
 }
 
-func (db *sqlite3) LeaveBtreeAll() {
+func (db *sqlite3) Unlock() {
 	for _, database := range db.Databases {
-		if database.pBt != nil {
-			database.pBt.Unlock()
+		if database.BtShared != nil {
+			database.BtShared.Unlock()
 		}
 	}
+}
+
+func (db *sqlite3) CriticalSection(f func()) {
+	defer db.Unlock()
+	db.Lock()
+	f()
 }
 
 //	Return true if a particular Btree requires a lock. Return FALSE if no lock is ever required since it is not sharable.

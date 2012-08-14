@@ -153,7 +153,7 @@ static void attachFunc(
         zErrDyn = sqlite3DbStrDup(db, "Invalid key value");
         rc = SQLITE_ERROR;
         break;
-        
+
       case SQLITE_TEXT:
       case SQLITE_BLOB:
         nKey = sqlite3_value_bytes(argv[2]);
@@ -172,14 +172,14 @@ static void attachFunc(
   }
 
   /* If the file was opened successfully, read the schema for the new database.
-  ** If this fails, or if opening the file failed, then close the file and 
+  ** If this fails, or if opening the file failed, then close the file and
   ** remove the entry from the db.Databases[] array. i.e. put everything back the way
   ** we found it.
   */
   if( rc==SQLITE_OK ){
-    db.LockAll()
-    rc = db.Init(zErrDyn)
-    db.LeaveBtreeAll()
+    db.CriticalSection(func() {
+		rc = db.Init(zErrDyn)
+	})
   }
   if( rc ){
     int iDb = len(db.Databases) - 1
@@ -199,7 +199,7 @@ static void attachFunc(
     }
     goto attach_error;
   }
-  
+
   return;
 
 attach_error:
@@ -288,7 +288,7 @@ static void codeAttach(
   memset(&sName, 0, sizeof(NameContext));
   sName.Parse = pParse;
 
-  if( 
+  if(
       SQLITE_OK!=(rc = resolveAttachExpr(&sName, pFilename)) ||
       SQLITE_OK!=(rc = resolveAttachExpr(&sName, pDbname)) ||
       SQLITE_OK!=(rc = resolveAttachExpr(&sName, pKey))
@@ -328,7 +328,7 @@ static void codeAttach(
     */
     v.AddOp1(OP_Expire, (type==SQLITE_ATTACH));
   }
-  
+
 attach_end:
   db.ExprDelete(pFilename)
   db.ExprDelete(pDbname)

@@ -1,6 +1,6 @@
 import "crypto/rand"
 
-/* The code in this file implements execution method of the 
+/* The code in this file implements execution method of the
 ** Virtual Database Engine (VDBE).  A separate file ("vdbeaux.c")
 ** handles housekeeping details such as creating and deleting
 ** VDBE instances.  This file is solely interested in executing
@@ -10,10 +10,10 @@ import "crypto/rand"
 ** to a VDBE.
 **
 ** The SQL parser generates a program which is then executed by
-** the VDBE to do the work of the SQL statement.  VDBE programs are 
+** the VDBE to do the work of the SQL statement.  VDBE programs are
 ** similar in form to assembly language.  The program consists of
-** a linear sequence of operations.  Each operation has an opcode 
-** and 5 operands.  Operands P1, P2, and P3 are integers.  Operand P4 
+** a linear sequence of operations.  Each operation has an opcode
+** and 5 operands.  Operands P1, P2, and P3 are integers.  Operand P4
 ** is a null-terminated string.  Operand P5 is an unsigned character.
 ** Few opcodes use all 5 operands.
 **
@@ -22,7 +22,7 @@ import "crypto/rand"
 ** either an integer, a null-terminated string, a floating point
 ** number, or the SQL "NULL" value.  An implicit conversion from one
 ** type to the other occurs as necessary.
-** 
+**
 ** Most of the code in this file is taken up by the sqlite3VdbeExec()
 ** function which does the work of interpreting a VDBE program.
 ** But other routines are also provided to help in building up
@@ -83,64 +83,36 @@ func (pMem *Mem) StoreType() {
 	}
 }
 
-/*
-** Allocate VdbeCursor number iCur.  Return a pointer to it.  Return NULL
-** if we run out of memory.
-*/
-static VdbeCursor *allocateCursor(
-  Vdbe *p,              /* The virtual machine */
-  int iCur,             /* Index of the new VdbeCursor */
-  int nField,           /* Number of fields in the table or index */
-  int iDb,              /* Database the cursor belongs to, or -1 */
-  int isBtreeCursor     /* True for B-Tree.  False for pseudo-table or vtab */
-){
-  /* Find the memory cell that will be used to store the blob of memory
-  ** required for this VdbeCursor structure. It is convenient to use a 
-  ** vdbe memory cell to manage the memory allocation required for a
-  ** VdbeCursor structure for the following reasons:
-  **
-  **   * Sometimes cursor numbers are used for a couple of different
-  **     purposes in a vdbe program. The different uses might require
-  **     different sized allocations. Memory cells provide growable
-  **     allocations.
-  **
-  **   * When using ENABLE_MEMORY_MANAGEMENT, memory cell buffers can
-  **     be freed lazily via the ReleaseMemory() API. This
-  **     minimizes the number of malloc calls made by the system.
-  **
-  ** Memory cells for cursors are allocated at the top of the address
-  ** space. Memory cell (p.nMem) corresponds to cursor 0. Space for
-  ** cursor 1 is managed by memory cell (p.nMem-1), etc.
-  */
-  Mem *pMem = &p.aMem[p.nMem-iCur];
+//	Allocate VdbeCursor number iCur. Return a pointer to it. Return NULL if we run out of memory.
+func (p *Vdbe) allocateCursor(cursor, fields, database int, isBtreeCursor bool) (pCx *VdbeCursor) {
+	//	Find the memory cell that will be used to store the blob of memory required for this VdbeCursor structure. It is convenient to use a vdbe memory cell to manage the memory allocation required for a VdbeCursor structure for the following reasons:
+	//		*	Sometimes cursor numbers are used for a couple of different purposes in a vdbe program. The different uses might require different sized allocations. Memory cells provide growable allocations.
+	//		*	memory cell buffers can be freed lazily via the ReleaseMemory() API. This minimizes the number of malloc calls made by the system.
+	//	Memory cells for cursors are allocated at the top of the address space. Memory cell (p.nMem) corresponds to cursor 0. Space for cursor 1 is managed by memory cell (p.nMem-1), etc.
+	pMem := &p.aMem[p.nMem - cursor]
 
-  int nByte;
-  VdbeCursor *pCx = 0;
-  nByte = 
-      ROUND(sizeof(VdbeCursor), 8) + 
-      (isBtreeCursor?sqlite3BtreeCursorSize():0) + 
-      2*nField*sizeof(uint32);
+	nByte := ROUND(sizeof(VdbeCursor), 8) + (isBtreeCursor ? sqlite3BtreeCursorSize() : 0) + 2 * fields * sizeof(uint32)
 
-  assert( iCur<p.nCursor );
-  if( p.apCsr[iCur] ){
-    p.FreeCursor(p.apCsr[iCur])
-    p.apCsr[iCur] = nil
-  }
-  if( SQLITE_OK==sqlite3VdbeMemGrow(pMem, nByte, 0) ){
-    p.apCsr[iCur] = pCx = (VdbeCursor*)pMem.z;
-    memset(pCx, 0, sizeof(VdbeCursor));
-    pCx.iDb = iDb;
-    pCx.nField = nField;
-    if( nField ){
-      pCx.aType = (uint32 *)&pMem.z[ROUND(sizeof(VdbeCursor), 8)];
-    }
-    if( isBtreeCursor ){
-      pCx.pCursor = (btree.Cursor*)
-          &pMem.z[ROUND(sizeof(VdbeCursor), 8)+2*nField*sizeof(uint32)];
-      sqlite3BtreeCursorZero(pCx.pCursor);
-    }
-  }
-  return pCx;
+	assert( cursor < p.nCursor )
+	if p.apCsr[cursor] {
+		p.FreeCursor(p.apCsr[cursor])
+		p.apCsr[cursor] = nil
+	}
+	if sqlite3VdbeMemGrow(pMem, nByte, 0) == SQLITE_OK {
+		pCx = (VdbeCursor*)pMem.z
+		p.apCsr[cursor] = pCx
+		memset(pCx, 0, sizeof(VdbeCursor))
+		pCx.iDb = database
+		pCx.nField = fields
+		if nField != 0 {
+			pCx.aType = (uint32 *)&pMem.z[ROUND(sizeof(VdbeCursor), 8)]
+		}
+		if isBtreeCursor {
+			pCx.pCursor = (btree.Cursor*)&pMem.z[ROUND(sizeof(VdbeCursor), 8) + 2 * fields * sizeof(uint32)]
+			sqlite3BtreeCursorZero(pCx.pCursor)
+		}
+	}
+	return
 }
 
 //	Try to convert a value into a numeric representation if we can do so without loss of information. In other words, if the string looks like a number, convert it into a number. If it does not look like a number, leave it alone.
@@ -200,12 +172,12 @@ func (pVal *sqlite3_value) NumericType() int {
 }
 
 /*
-** Exported version of applyAffinity(). This one works on sqlite3_value*, 
+** Exported version of applyAffinity(). This one works on sqlite3_value*,
 ** not the internal Mem* type.
 */
  void sqlite3ValueApplyAffinity(
-  sqlite3_value *pVal, 
-  byte affinity, 
+  sqlite3_value *pVal,
+  byte affinity,
   byte enc
 ){
   applyAffinity((Mem *)pVal, affinity, enc);
@@ -216,8 +188,8 @@ func (pVal *sqlite3_value) NumericType() int {
 
 #ifdef VDBE_PROFILE
 
-/* 
-** hwtime.h contains inline assembler code for implementing 
+/*
+** hwtime.h contains inline assembler code for implementing
 ** high-performance timing routines.
 */
 /************** Include hwtime.h in the middle of vdbe.c *********************/
@@ -861,7 +833,7 @@ static void importVtabErrMsg(Vdbe *p, sqlite3_vtab *pVtab){
 /* Opcode:  Goto * P2 * * *
 **
 ** An unconditional jump to address P2.
-** The next instruction executed will be 
+** The next instruction executed will be
 ** the one at index P2 from the beginning of
 ** the program.
 */
@@ -900,7 +872,7 @@ case OP_Return:				//	in1
 case OP_Yield:				//	in1
 	pIn1 = &aMem[pOp.p1]
 	assert( pIn1.flags & MEM_Dyn == 0 )
-	pIn1.flags = 
+	pIn1.flags =
 	u.aa.pcDest = pIn1.Integer()
 	pIn1.Store(pc)
 	REGISTER_TRACE(pOp.p1, pIn1)
@@ -997,7 +969,7 @@ case OP_String8:					//	same as TK_STRING, out2-prerelease
 		goto too_big
 	}
 	fallthrough
-  
+
 //	Opcode: String P1 P2 * P4 *
 //	The string value P4 of length P1 (bytes) is stored in register P2.
 case OP_String:				//	out2-prerelease
@@ -2170,7 +2142,7 @@ case OP_MakeRecord:
 
 /* Opcode: Count P1 P2 * * *
 **
-** Store the number of entries (an integer value) in the table or index 
+** Store the number of entries (an integer value) in the table or index
 ** opened by cursor P1 in register P2
 */
 case OP_Count: {         /* out2-prerelease */
@@ -2395,7 +2367,7 @@ case OP_Transaction: {
   u.at.pBt = db.Databases[pOp.p1].pBt;
 
   if( u.at.pBt ){
-    rc = sqlite3BtreeBeginTrans(u.at.pBt, pOp.p2);
+    rc = u.at.pBt.BeginTransaction(pOp.p2)
     if( rc==SQLITE_BUSY ){
       p.pc = pc;
       p.rc = rc = SQLITE_BUSY;
@@ -2457,9 +2429,9 @@ case OP_ReadCookie: {               /* out2-prerelease */
 /* Opcode: SetCookie P1 P2 P3 * *
 **
 ** Write the content of register P3 (interpreted as an integer)
-** into cookie number P2 of database P1.  P2==1 is the schema version.  
-** P2==2 is the database format. P2==3 is the recommended pager cache 
-** size, and so forth.  P1==0 is the main database file and P1==1 is the 
+** into cookie number P2 of database P1.  P2==1 is the schema version.
+** P2==2 is the database format. P2==3 is the recommended pager cache
+** size, and so forth.  P1==0 is the main database file and P1==1 is the
 ** database file used to store temporary tables.
 **
 ** A transaction must be started before executing this opcode.
@@ -2547,8 +2519,8 @@ case OP_VerifyCookie: {
 /* Opcode: OpenRead P1 P2 P3 P4 P5
 **
 ** Open a read-only cursor for the database table whose root page is
-** P2 in a database file.  The database file is determined by P3. 
-** P3==0 means the main database, P3==1 means the database used for 
+** P2 in a database file.  The database file is determined by P3.
+** P3==0 means the main database, P3==1 means the database used for
 ** temporary tables, and P3>1 means used the corresponding attached
 ** database.  Give the new cursor an identifier of P1.  The P1
 ** values need not be contiguous but all P1 values should be small integers.
@@ -2567,9 +2539,9 @@ case OP_VerifyCookie: {
 ** SQLITE_BUSY error code.
 **
 ** The P4 value may be either an integer (P4_INT32) or a pointer to
-** a KeyInfo structure (P4_KEYINFO). If it is a pointer to a KeyInfo 
-** structure, then said structure defines the content and collating 
-** sequence of the index being opened. Otherwise, if P4 is an integer 
+** a KeyInfo structure (P4_KEYINFO). If it is a pointer to a KeyInfo
+** structure, then said structure defines the content and collating
+** sequence of the index being opened. Otherwise, if P4 is an integer
 ** value, it is set to the number of columns in the table.
 **
 ** See also OpenWrite.
@@ -2581,9 +2553,9 @@ case OP_VerifyCookie: {
 ** root page.
 **
 ** The P4 value may be either an integer (P4_INT32) or a pointer to
-** a KeyInfo structure (P4_KEYINFO). If it is a pointer to a KeyInfo 
-** structure, then said structure defines the content and collating 
-** sequence of the index being opened. Otherwise, if P4 is an integer 
+** a KeyInfo structure (P4_KEYINFO). If it is a pointer to a KeyInfo
+** structure, then said structure defines the content and collating
+** sequence of the index being opened. Otherwise, if P4 is an integer
 ** value, it is set to the number of columns in the table, or to the
 ** largest index of any column of the table that is actually used.
 **
@@ -2642,7 +2614,7 @@ case OP_OpenWrite: {
     u.ax.nField = pOp.p4.i;
   }
   assert( pOp.p1>=0 );
-  u.ax.pCur = allocateCursor(p, pOp.p1, u.ax.nField, u.ax.iDb, 1);
+  u.ax.pCur = p.allocateCursor(pOp.p1, u.ax.nField, u.ax.iDb, true)
   if( u.ax.pCur==0 ) goto no_mem;
   u.ax.pCur.nullRow = 1;
   u.ax.pCur.isOrdered = 1;
@@ -2665,7 +2637,7 @@ case OP_OpenWrite: {
 /* Opcode: OpenEphemeral P1 P2 * P4 P5
 **
 ** Open a new cursor P1 to a transient table.
-** The cursor is always opened read/write even if 
+** The cursor is always opened read/write even if
 ** the main database is read-only.  The ephemeral
 ** table is deleted automatically when the cursor is closed.
 **
@@ -2692,7 +2664,7 @@ case OP_OpenWrite: {
 ** by this opcode will be used for automatically created transient
 ** indices in joins.
 */
-case OP_OpenAutoindex: 
+case OP_OpenAutoindex:
 case OP_OpenEphemeral: {
   static const int vfsFlags =
       SQLITE_OPEN_READWRITE |
@@ -2702,13 +2674,13 @@ case OP_OpenEphemeral: {
       SQLITE_OPEN_TRANSIENT_DB;
 
   assert( pOp.p1>=0 );
-  u.ay.pCx = allocateCursor(p, pOp.p1, pOp.p2, -1, 1);
+  u.ay.pCx = p.allocateCursor(pOp.p1, pOp.p2, -1, true)
   if( u.ay.pCx==0 ) goto no_mem;
   u.ay.pCx.nullRow = 1;
   rc = sqlite3BtreeOpen(db.pVfs, 0, db, &u.ay.pCx.pBt,
                         BTREE_OMIT_JOURNAL | BTREE_SINGLE | pOp.p5, vfsFlags);
   if( rc==SQLITE_OK ){
-    rc = sqlite3BtreeBeginTrans(u.ay.pCx.pBt, 1);
+    rc = u.ay.pCx.pBt.BeginTransaction(1)
   }
   if( rc==SQLITE_OK ){
     /* If a transient index is required, create it by calling
@@ -2744,7 +2716,7 @@ case OP_OpenEphemeral: {
 ** tables using an external merge-sort algorithm.
 */
 case OP_SorterOpen: {
-  u.az.pCx = allocateCursor(p, pOp.p1, pOp.p2, -1, 1);
+  u.az.pCx = p.allocateCursor(pOp.p1, pOp.p2, -1, true)
   if( u.az.pCx==0 ) goto no_mem;
   u.az.pCx.pKeyInfo = pOp.p4.pKeyInfo;
   u.az.pCx.pKeyInfo.enc = p.db.Encoding()
@@ -2757,7 +2729,7 @@ case OP_SorterOpen: {
 **
 ** Open a new cursor that points to a fake table that contains a single
 ** row of data.  The content of that one row in the content of memory
-** register P2.  In other words, cursor P1 becomes an alias for the 
+** register P2.  In other words, cursor P1 becomes an alias for the
 ** MEM_Blob content contained in register P2.
 **
 ** A pseudo-table created by this opcode is used to hold a single
@@ -2770,7 +2742,7 @@ case OP_SorterOpen: {
 */
 case OP_OpenPseudo: {
   assert( pOp.p1>=0 );
-  u.ba.pCx = allocateCursor(p, pOp.p1, pOp.p3, -1, 0);
+  u.ba.pCx = p.allocateCursor(pOp.p1, pOp.p3, -1, false)
   if( u.ba.pCx==0 ) goto no_mem;
   u.ba.pCx.nullRow = 1;
   u.ba.pCx.pseudoTableReg = pOp.p2;
@@ -2797,7 +2769,7 @@ case OP_Close: {
 //	Reposition cursor P1 so that it points to the smallest entry that is greater than the key value. If there are no records greater than the key and P2 is not zero, then jump to P2.
 //	See also: Found, NotFound, Distinct, SeekLt, SeekGe, SeekLe
 //
-//	Opcode: SeekLt P1 P2 P3 P4 * 
+//	Opcode: SeekLt P1 P2 P3 P4 *
 //	If cursor P1 refers to an SQL table (B-Tree that uses integer keys), use the value in register P3 as a key. If cursor P1 refers to an SQL index, then P3 is the first in an array of P4 registers that are used as an unpacked index key.
 //	Reposition cursor P1 so that  it points to the largest entry that is less than the key value. If there are no records less than the key and P2 is not zero, then jump to P2.
 //	See also: Found, NotFound, Distinct, SeekGt, SeekGe, SeekLe
@@ -2953,7 +2925,7 @@ case OP_Seek:			//	in2
 		u.bc.pC.rowidIsValid = 0
 		u.bc.pC.deferredMoveto = 1
 	}
-  
+
 //	Opcode: Found P1 P2 P3 P4 *
 //	If P4 == 0 then register P3 holds a blob constructed by MakeRecord. If P4 > 0 then register P3 is the first of P4 registers that form an unpacked record.
 //	Cursor P1 is on an index btree. If the record identified by P3 and P4 is a prefix of any entry in P1 then a jump is made to P2 and P1 is left pointing at the matching entry.
@@ -3097,7 +3069,7 @@ case OP_NotExists:				//	jump, in3
 	}
 
 //	Opcode: Sequence P1 P2 * * *
-//	Find the next available sequence number for cursor P1. Write the sequence number into register P2. The sequence number on the cursor is incremented after this instruction.  
+//	Find the next available sequence number for cursor P1. Write the sequence number into register P2. The sequence number on the cursor is incremented after this instruction.
 case OP_Sequence:				//	out2-prerelease
 	assert( pOp.p1 >= 0 && pOp.p1 < p.nCursor )
 	assert( p.apCsr[pOp.p1] != 0 )
@@ -3111,9 +3083,9 @@ case OP_Sequence:				//	out2-prerelease
 ** table that cursor P1 points to.  The new record number is written
 ** written to register P2.
 **
-** If P3>0 then P3 is a register in the root frame of this VDBE that holds 
+** If P3>0 then P3 is a register in the root frame of this VDBE that holds
 ** the largest previously generated record number. No new record numbers are
-** allowed to be less than this value. When this value reaches its maximum, 
+** allowed to be less than this value. When this value reaches its maximum,
 ** an SQLITE_FULL error is generated. The P3 register is updated with the '
 ** generated record number. This P3 mechanism is used to help implement the
 ** AUTOINCREMENT feature.
@@ -3678,28 +3650,28 @@ case OP_IdxRowid:				//	out2-prerelease
 
 /* Opcode: IdxGE P1 P2 P3 P4 P5
 **
-** The P4 register values beginning with P3 form an unpacked index 
-** key that omits the ROWID.  Compare this key value against the index 
+** The P4 register values beginning with P3 form an unpacked index
+** key that omits the ROWID.  Compare this key value against the index
 ** that P1 is currently pointing to, ignoring the ROWID on the P1 index.
 **
 ** If the P1 index entry is greater than or equal to the key value
 ** then jump to P2.  Otherwise fall through to the next instruction.
 **
-** If P5 is non-zero then the key value is increased by an epsilon 
+** If P5 is non-zero then the key value is increased by an epsilon
 ** prior to the comparison.  This make the opcode work like IdxGT except
 ** that if the key from register P3 is a prefix of the key in the cursor,
 ** the result is false whereas it would be true with IdxGT.
 */
 /* Opcode: IdxLT P1 P2 P3 P4 P5
 **
-** The P4 register values beginning with P3 form an unpacked index 
-** key that omits the ROWID.  Compare this key value against the index 
+** The P4 register values beginning with P3 form an unpacked index
+** key that omits the ROWID.  Compare this key value against the index
 ** that P1 is currently pointing to, ignoring the ROWID on the P1 index.
 **
 ** If the P1 index entry is less than the key value then jump to P2.
 ** Otherwise fall through to the next instruction.
 **
-** If P5 is non-zero then the key value is increased by an epsilon prior 
+** If P5 is non-zero then the key value is increased by an epsilon prior
 ** to the comparison.  This makes the opcode work like IdxLE.
 */
 case OP_IdxLT:          /* jump */
@@ -3811,7 +3783,7 @@ case OP_CreateTable:					//	out2-prerelease
 /* Opcode: ParseSchema P1 * * P4 *
 **
 ** Read and parse all entries from the SQLITE_MASTER table of database P1
-** that match the WHERE clause P4. 
+** that match the WHERE clause P4.
 **
 ** This opcode invokes the parser to create a new virtual machine,
 ** then runs the new virtual machine.  It is thus a re-entrant opcode.
@@ -3861,7 +3833,7 @@ case OP_ParseSchema: {
 case OP_LoadAnalysis: {
   assert( pOp.p1 >= 0 && pOp.p1 < len(db.Databases) )
   rc = sqlite3AnalysisLoad(db, pOp.p1);
-  break;  
+  break;
 }
 
 //	Opcode: DropTable P1 * * P4 *
@@ -3888,7 +3860,7 @@ case OP_DropTrigger:
 **
 ** The register P3 contains the maximum number of allowed errors.
 ** At most reg(P3) errors will be reported.
-** In other words, the analysis stops as soon as reg(P1) errors are 
+** In other words, the analysis stops as soon as reg(P1) errors are
 ** seen.  Reg(P1) is updated with the number of errors remaining.
 **
 ** The root page numbers of all tables in the database are integer
@@ -3997,7 +3969,7 @@ case OP_RowSetTest:						//	jump, in1, in3
 	}
 
 //	Opcode: Program P1 P2 P3 P4 *
-//	Execute the trigger program passed as P4 (type P4_SUBPROGRAM). 
+//	Execute the trigger program passed as P4 (type P4_SUBPROGRAM).
 //	P1 contains the address of the memory cell that contains the first memory cell in an array of values used as arguments to the sub-program. P2 contains the address to jump to if the sub-program throws an IGNORE exception using the RAISE() function. Register P3 contains the address of a memory cell in this (the parent) VM that is used to allocate the memory required by the sub-vdbe at runtime.
 //	P4 is a pointer to the VM containing the trigger program.
 case OP_Program: {		//	jump
@@ -4093,8 +4065,8 @@ case OP_Param: {				//	out2-prerelease
 /* Opcode: FkCounter P1 P2 * * *
 **
 ** Increment a "constraint counter" by P2 (P2 may be negative or positive).
-** If P1 is non-zero, the database constraint counter is incremented 
-** (deferred foreign key constraints). Otherwise, if P1 is zero, the 
+** If P1 is non-zero, the database constraint counter is incremented
+** (deferred foreign key constraints). Otherwise, if P1 is zero, the
 ** statement counter is incremented (immediate foreign key constraints).
 */
 case OP_FkCounter: {
@@ -4109,7 +4081,7 @@ case OP_FkCounter: {
 /* Opcode: FkIfZero P1 P2 * * *
 **
 ** This opcode tests if a foreign key constraint-counter is currently zero.
-** If so, jump to instruction P2. Otherwise, fall through to the next 
+** If so, jump to instruction P2. Otherwise, fall through to the next
 ** instruction.
 **
 ** If P1 is non-zero, then the jump is taken if the database constraint-counter
@@ -4157,7 +4129,7 @@ case OP_IfPos:					//	jump, in1
 	}
 
 //	Opcode: IfNeg P1 P2 * * *
-//	If the value of register P1 is less than zero, jump to P2. 
+//	If the value of register P1 is less than zero, jump to P2.
 //	It is illegal to use this instruction on a register that does not contain an integer. An assertion fault will result if you try.
 case OP_IfNeg:					//	jump, in1
 	pIn1 = &aMem[pOp.p1]
@@ -4167,7 +4139,7 @@ case OP_IfNeg:					//	jump, in1
 	}
 
 //	Opcode: IfZero P1 P2 P3 * *
-//	The register P1 must contain an integer. Add literal P3 to the value in register P1. If the result is exactly 0, jump to P2. 
+//	The register P1 must contain an integer. Add literal P3 to the value in register P1. If the result is exactly 0, jump to P2.
 //	It is illegal to use this instruction on a register that does not contain an integer. An assertion fault will result if you try.
 case OP_IfZero:					//	jump, in1
 	pIn1 = &aMem[pOp.p1]
@@ -4269,7 +4241,7 @@ case OP_Checkpoint: {
     u.ch.pMem.SetInt64(int64(u.ch.aRes[u.ch.i]))
   }
   break;
-};  
+};
 
 #ifndef SQLITE_OMIT_PRAGMA
 /* Opcode: JournalMode P1 P2 P3 * P5
@@ -4338,12 +4310,14 @@ case OP_JournalMode: {    /* out2-prerelease */
         sqlite3PagerSetJournalMode(u.ci.pPager, PAGER_JOURNALMODE_OFF);
       }
 
-      /* Open a transaction on the database file. Regardless of the journal
-      ** mode, this transaction always uses a rollback journal.
-      */
+      //	Open a transaction on the database file. Regardless of the journal mode, this transaction always uses a rollback journal.
       assert( !u.ci.pBt.IsInTrans() )
-      if( rc==SQLITE_OK ){
-        rc = sqlite3BtreeSetVersion(u.ci.pBt, (u.ci.eNew==PAGER_JOURNALMODE_WAL ? 2 : 1));
+      if rc == SQLITE_OK {
+		if u.ci.eNew == PAGER_JOURNALMODE_WAL {
+			rc = u.ci.pBt.SetVersion(2)
+		} else {
+			rc = u.ci.pBt.SetVersion(1)
+		}
       }
     }
   }
@@ -4397,11 +4371,11 @@ case OP_IncrVacuum: {        /* jump */
 /* Opcode: Expire P1 * * * *
 **
 ** Cause precompiled statements to become expired. An expired statement
-** fails with an error code of SQLITE_SCHEMA if it is ever executed 
+** fails with an error code of SQLITE_SCHEMA if it is ever executed
 ** (via sqlite3_step()).
-** 
+**
 ** If P1 is 0, then all SQL statements become expired. If P1 is non-zero,
-** then only the currently executing statement is affected. 
+** then only the currently executing statement is affected.
 */
 case OP_Expire: {
   if( !pOp.p1 ){
@@ -4415,7 +4389,7 @@ case OP_Expire: {
 /* Opcode: TableLock P1 P2 P3 P4 *
 **
 ** Obtain a lock on a particular table. This instruction is only used when
-** the shared-cache feature is enabled. 
+** the shared-cache feature is enabled.
 **
 ** P1 is the index of the database in sqlite3.Databases[] of the database
 ** on which the lock is acquired.  A readlock is obtained if P3==0 or
@@ -4429,7 +4403,7 @@ case OP_Expire: {
 case OP_TableLock: {
   byte isWriteLock = (byte)pOp.p3;
   if( isWriteLock || 0==(db.flags&SQLITE_ReadUncommitted) ){
-    int p1 = pOp.p1; 
+    int p1 = pOp.p1;
     assert( p1 >= 0 && p1 < len(db.Databases) )
     assert( (p.btreeMask & (((yDbMask)1)<<p1))!=0 );
     assert( isWriteLock==0 || isWriteLock==1 );
@@ -4444,7 +4418,7 @@ case OP_TableLock: {
 
 /* Opcode: VBegin * * * P4 *
 **
-** P4 may be a pointer to an sqlite3_vtab structure. If so, call the 
+** P4 may be a pointer to an sqlite3_vtab structure. If so, call the
 ** xBegin method for that table.
 **
 ** Also, whether or not P4 is set, check that this is not being called from
@@ -4499,7 +4473,7 @@ case OP_VOpen: {
     u.cl.pVtabCursor.pVtab = u.cl.pVtab;
 
     /* Initialise vdbe cursor object */
-    u.cl.pCur = allocateCursor(p, pOp.p1, 0, -1, 0);
+    u.cl.pCur = p.allocateCursor(pOp.p1, 0, -1, false)
     if( u.cl.pCur ){
       u.cl.pCur.pVtabCursor = u.cl.pVtabCursor;
       u.cl.pCur.Callbacks = u.cl.pVtabCursor.pVtab.Callbacks;
@@ -4634,23 +4608,23 @@ case OP_VRename:
 **
 ** P4 is a pointer to a virtual table object, an sqlite3_vtab structure.
 ** This opcode invokes the corresponding xUpdate method. P2 values
-** are contiguous memory cells starting at P3 to pass to the xUpdate 
-** invocation. The value in register (P3+P2-1) corresponds to the 
+** are contiguous memory cells starting at P3 to pass to the xUpdate
+** invocation. The value in register (P3+P2-1) corresponds to the
 ** p2th element of the argv array passed to xUpdate.
 **
 ** The xUpdate method will do a DELETE or an INSERT or both.
 ** The argv[0] element (which corresponds to memory cell P3)
-** is the rowid of a row to delete.  If argv[0] is NULL then no 
-** deletion occurs.  The argv[1] element is the rowid of the new 
-** row.  This can be NULL to have the virtual table select the new 
-** rowid for itself.  The subsequent elements in the array are 
+** is the rowid of a row to delete.  If argv[0] is NULL then no
+** deletion occurs.  The argv[1] element is the rowid of the new
+** row.  This can be NULL to have the virtual table select the new
+** rowid for itself.  The subsequent elements in the array are
 ** the values of columns in the new row.
 **
 ** If P2==1 then no insert is performed.  argv[0] is the rowid of
 ** a row to delete.
 **
 ** P1 is a boolean flag. If it is set to true and the xUpdate call
-** is successful, then the value returned by sqlite3_last_insert_rowid() 
+** is successful, then the value returned by sqlite3_last_insert_rowid()
 ** is set to the value of the rowid for the row just inserted.
 */
 case OP_VUpdate: {

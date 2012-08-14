@@ -83,7 +83,7 @@ static void pcacheUnpin(PgHdr *p){
 
 /*************************************************** General Interfaces ******
 **
-** Initialize and shutdown the page cache subsystem. Neither of these 
+** Initialize and shutdown the page cache subsystem. Neither of these
 ** functions are threadsafe.
 */
  int sqlite3PcacheInitialize(void){
@@ -102,24 +102,21 @@ static void pcacheUnpin(PgHdr *p){
   }
 }
 
-/*
-** Decrement the reference count on a page. If the page is clean and the
-** reference count drops to 0, then it is made elible for recycling.
-*/
- void sqlite3PcacheRelease(PgHdr *p){
-  assert( p.nRef>0 );
-  p.nRef--;
-  if( p.nRef==0 ){
-    PCache *pCache = p.pCache;
-    pCache.nRef--;
-    if( (p.flags&PGHDR_DIRTY)==0 ){
-      pcacheUnpin(p);
-    }else{
-      /* Move the page to the head of the dirty list. */
-      pcacheRemoveFromDirtyList(p);
-      pcacheAddToDirtyList(p);
-    }
-  }
+//	Decrement the reference count on a page. If the page is clean and the reference count drops to 0, then it is made elible for recycling.
+func (p *PgHdr) CacheRelease() {
+void sqlite3PcacheRelease(PgHdr *p){
+	assert( p.nRef > 0 )
+	if p.nRef--; p.nRef == 0 {
+		pCache = p.pCache
+		pCache.nRef--
+		if p.flags & PGHDR_DIRTY == 0 {
+			pcacheUnpin(p)
+		} else {
+			//	Move the page to the head of the dirty list.
+			pcacheRemoveFromDirtyList(p)
+			pcacheAddToDirtyList(p)
+		}
+	}
 }
 
 /*
@@ -177,7 +174,7 @@ static void pcacheUnpin(PgHdr *p){
 }
 
 /*
-** Change the page number of page p to newPageNumber. 
+** Change the page number of page p to newPageNumber.
 */
  void sqlite3PcacheMove(PgHdr *p, PageNumber newPageNumber){
   PCache *pCache = p.pCache;

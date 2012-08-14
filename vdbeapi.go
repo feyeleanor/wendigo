@@ -44,11 +44,10 @@ func int sqlite3_finalize(sqlite3_stmt *pStmt){
     sqlite3 *db = v.db;
     sqlite3_mutex *mutex;
     if( vdbeSafety(v) ) return SQLITE_MISUSE_BKPT;
-    mutex = v.db.mutex;
-    mutex.Lock()
-    rc = v.Finalize()
-    rc = db.ApiExit(rc)
-    mutex.Unlock()
+    v.db.mutex.CriticalSection(func() {
+		rc = v.Finalize()
+		rc = db.ApiExit(rc)
+    })
   }
   return rc;
 }
@@ -62,19 +61,19 @@ func int sqlite3_finalize(sqlite3_stmt *pStmt){
 ** sqlite3_errcode() or sqlite3_errmsg().
 */
 func int sqlite3_reset(sqlite3_stmt *pStmt){
-  int rc;
-  if( pStmt==0 ){
-    rc = SQLITE_OK;
-  }else{
-    Vdbe *v = (Vdbe*)pStmt;
-    v.db.mutex.Lock()
-    rc = v.Reset()
-    v.Rewind()
-    assert( (rc & (v.db.errMask))==rc );
-    rc = v.db.ApiExit(rc)
-    v.db.mutex.Unlock()
-  }
-  return rc;
+	int rc;
+	if( pStmt==0 ){
+		rc = SQLITE_OK;
+	}else{
+		Vdbe *v = (Vdbe*)pStmt;
+		v.db.mutex.CriticalSection(func() {
+			rc = v.Reset()
+			v.Rewind()
+			assert( (rc & (v.db.errMask))==rc )
+			rc = v.db.ApiExit(rc)
+		})
+	}
+	return rc;
 }
 
 //	Set all the parameters in the compiled SQL statement to NULL.
@@ -147,9 +146,9 @@ static void setResultStrOrError(
   }
 }
 func void sqlite3_result_blob(
-  sqlite3_context *pCtx, 
-  const void *z, 
-  int n, 
+  sqlite3_context *pCtx,
+  const void *z,
+  int n,
   void (*xDel)(void *)
 ){
   assert( n>=0 );
@@ -172,8 +171,8 @@ func void sqlite3_result_null(sqlite3_context *pCtx){
   pCtx.s.SetNull()
 }
 func void sqlite3_result_text(
-  sqlite3_context *pCtx, 
-  const char *z, 
+  sqlite3_context *pCtx,
+  const char *z,
   int n,
   void (*xDel)(void *)
 ){
@@ -224,7 +223,7 @@ func (db *sqlite3) doWalCallbacks() (rc int) {
 ** statement is completely executed or an error occurs.
 **
 ** This routine implements the bulk of the logic behind the sqlite_step()
-** API.  The only thing omitted is the automatic recompile if a 
+** API.  The only thing omitted is the automatic recompile if a
 ** schema change has occurred.  That detail is handled by the
 ** outer sqlite3_step() wrapper procedure.
 */
@@ -238,15 +237,15 @@ static int sqlite3Step(Vdbe *p){
     ** sqlite3_step() after any error or after SQLITE_DONE.  But beginning
     ** with version 3.7.0, we changed this so that sqlite3_reset() would
     ** be called automatically instead of throwing the SQLITE_MISUSE error.
-    ** This "automatic-reset" change is not technically an incompatibility, 
+    ** This "automatic-reset" change is not technically an incompatibility,
     ** since any application that receives an SQLITE_MISUSE is broken by
     ** definition.
     **
     ** Nevertheless, some published applications that were originally written
-    ** for version 3.6.23 or earlier do in fact depend on SQLITE_MISUSE 
+    ** for version 3.6.23 or earlier do in fact depend on SQLITE_MISUSE
     ** returns, and those were broken by the automatic-reset change.  As a
     ** a work-around, the SQLITE_OMIT_AUTORESET compile-time restores the
-    ** legacy behavior of returning SQLITE_MISUSE for cases where the 
+    ** legacy behavior of returning SQLITE_MISUSE for cases where the
     ** previous sqlite3_step() returned something other than a SQLITE_LOCKED
     ** or SQLITE_BUSY error.
     */
@@ -366,15 +365,15 @@ func int sqlite3_step(sqlite3_stmt *pStmt){
     assert( v.expired==0 );
   }
   if( rc2!=SQLITE_OK && v.isPrepareV2 && db.pErr ){
-    /* This case occurs after failing to recompile an sql statement. 
-    ** The error message from the SQL compiler has already been loaded 
-    ** into the database handle. This block copies the error message 
+    /* This case occurs after failing to recompile an sql statement.
+    ** The error message from the SQL compiler has already been loaded
+    ** into the database handle. This block copies the error message
     ** from the database handle into the statement and sets the statement
-    ** program counter to 0 to ensure that when the statement is 
+    ** program counter to 0 to ensure that when the statement is
     ** finalized or reset the parser error message is available via
     ** sqlite3_errmsg() and sqlite3_errcode().
     */
-    const char *zErr = (const char *)sqlite3_value_text(db.pErr); 
+    const char *zErr = (const char *)sqlite3_value_text(db.pErr);
     v.zErrMsg = sqlite3DbStrDup(db, zErr);
     v.rc = rc2;
   }
@@ -469,9 +468,9 @@ func void *sqlite3_get_auxdata(sqlite3_context *pCtx, int iArg){
 ** deleted by calling the delete function specified when it was set.
 */
 func void sqlite3_set_auxdata(
-  sqlite3_context *pCtx, 
-  int iArg, 
-  void *pAux, 
+  sqlite3_context *pCtx,
+  int iArg,
+  void *pAux,
   void (*xDelete)(void*)
 ){
   struct AuxData *pAuxData;
@@ -543,9 +542,9 @@ func (pStmt *sqlite3_stmt) ColumnMem(i int) (pOut *Mem) {
 }
 
 /*
-** This function is called after invoking an sqlite3_value_XXX function on a 
+** This function is called after invoking an sqlite3_value_XXX function on a
 ** column value (i.e. a value returned by evaluating an SQL expression in the
-** select list of a SELECT statement) that may cause a malloc() failure. If 
+** select list of a SELECT statement) that may cause a malloc() failure. If
 ** malloc() has failed, the threads mallocFailed flag is cleared and the result
 ** code of statement pStmt set to SQLITE_NOMEM.
 **
@@ -580,8 +579,8 @@ func const void *sqlite3_column_blob(sqlite3_stmt *pStmt, int i){
   const void *val;
   val = sqlite3_value_blob( pStmt.ColumnMem(i) );
   /* Even though there is no encoding conversion, value_blob() might
-  ** need to call malloc() to expand the result of a zeroblob() 
-  ** expression. 
+  ** need to call malloc() to expand the result of a zeroblob()
+  ** expression.
   */
   columnMallocFailure(pStmt);
   return val;
@@ -659,7 +658,7 @@ static const void *columnName(
   Vdbe *p = (Vdbe *)pStmt;
   int n;
   sqlite3 *db = p.db;
-  
+
   assert( db!=0 );
   n = sqlite3_column_count(pStmt);
   if( N<n && N>=0 ){
@@ -688,57 +687,29 @@ func const char *sqlite3_column_name(sqlite3_stmt *pStmt, int N){
       pStmt, N, (const void*(*)(Mem*))sqlite3_value_text, COLNAME_NAME);
 }
 
-/*
-** Constraint:  If you have ENABLE_COLUMN_METADATA then you must
-** not define OMIT_DECLTYPE.
-*/
-#if defined(SQLITE_OMIT_DECLTYPE) && defined(SQLITE_ENABLE_COLUMN_METADATA)
-# error "Must not define both SQLITE_OMIT_DECLTYPE \
-         and SQLITE_ENABLE_COLUMN_METADATA"
-#endif
-
-#ifndef SQLITE_OMIT_DECLTYPE
-/*
-** Return the column declaration type (if applicable) of the 'i'th column
-** of the result set of SQL statement pStmt.
-*/
+//	Return the column declaration type (if applicable) of the 'i'th column of the result set of SQL statement pStmt.
 func const char *sqlite3_column_decltype(sqlite3_stmt *pStmt, int N){
   return columnName(
       pStmt, N, (const void*(*)(Mem*))sqlite3_value_text, COLNAME_DECLTYPE);
 }
-#endif /* SQLITE_OMIT_DECLTYPE */
 
-#ifdef SQLITE_ENABLE_COLUMN_METADATA
-/*
-** Return the name of the database from which a result column derives.
-** NULL is returned if the result column is an expression or constant or
-** anything else which is not an unabiguous reference to a database column.
-*/
+// Return the name of the database from which a result column derives. NULL is returned if the result column is an expression or constant or anything else which is not an unabiguous reference to a database column.
 func const char *sqlite3_column_database_name(sqlite3_stmt *pStmt, int N){
   return columnName(
       pStmt, N, (const void*(*)(Mem*))sqlite3_value_text, COLNAME_DATABASE);
 }
 
-/*
-** Return the name of the table from which a result column derives.
-** NULL is returned if the result column is an expression or constant or
-** anything else which is not an unabiguous reference to a database column.
-*/
+//	Return the name of the table from which a result column derives. NULL is returned if the result column is an expression or constant or anything else which is not an unabiguous reference to a database column.
 func const char *sqlite3_column_table_name(sqlite3_stmt *pStmt, int N){
   return columnName(
       pStmt, N, (const void*(*)(Mem*))sqlite3_value_text, COLNAME_TABLE);
 }
 
-/*
-** Return the name of the table column from which a result column derives.
-** NULL is returned if the result column is an expression or constant or
-** anything else which is not an unabiguous reference to a database column.
-*/
+//	Return the name of the table column from which a result column derives. NULL is returned if the result column is an expression or constant or anything else which is not an unabiguous reference to a database column.
 func const char *sqlite3_column_origin_name(sqlite3_stmt *pStmt, int N){
   return columnName(
       pStmt, N, (const void*(*)(Mem*))sqlite3_value_text, COLNAME_COLUMN);
 }
-#endif /* SQLITE_ENABLE_COLUMN_METADATA */
 
 
 //	Unbind the value bound to variable i in virtual machine p. This is the the same as binding a NULL value to the column. If the "i" parameter is out of range, then SQLITE_RANGE is returned. Othewise SQLITE_OK.
@@ -836,11 +807,11 @@ func int sqlite3_bind_null(sqlite3_stmt *pStmt, int i){
   }
   return rc
 }
-func int sqlite3_bind_text( 
-  sqlite3_stmt *pStmt, 
-  int i, 
-  const char *zData, 
-  int nData, 
+func int sqlite3_bind_text(
+  sqlite3_stmt *pStmt,
+  int i,
+  const char *zData,
+  int nData,
   void (*xDel)(void*)
 ){
   return bindText(pStmt, i, zData, nData, xDel, SQLITE_UTF8);
@@ -877,7 +848,7 @@ func (pStmt *sqlite3_stmt) BindZeroBlob(i int, n Zeroes) (rc int) {
 
 /*
 ** Return the number of wildcards that can be potentially bound to.
-** This routine is added to support DBD::SQLite.  
+** This routine is added to support DBD::SQLite.
 */
 func int sqlite3_bind_parameter_count(sqlite3_stmt *pStmt){
   Vdbe *p = (Vdbe*)pStmt;
@@ -926,17 +897,16 @@ func int sqlite3_bind_parameter_index(sqlite3_stmt *pStmt, const char *Name){
 ** Transfer all bindings from the first statement over to the second.
 */
  int sqlite3TransferBindings(sqlite3_stmt *pFromStmt, sqlite3_stmt *pToStmt){
-  Vdbe *pFrom = (Vdbe*)pFromStmt;
-  Vdbe *pTo = (Vdbe*)pToStmt;
-  int i;
-  assert( pTo.db==pFrom.db );
-  assert( pTo.nVar==pFrom.nVar );
-  pTo.db.mutex.Lock()
-  for(i=0; i<pFrom.nVar; i++){
-    sqlite3VdbeMemMove(&pTo.aVar[i], &pFrom.aVar[i]);
-  }
-  pTo.db.mutex.Unlock()
-  return SQLITE_OK;
+	pFrom := (Vdbe*)(pFromStmt)
+	pTo := (Vdbe*)(pToStmt)
+	assert( pTo.db == pFrom.db )
+	assert( pTo.nVar == pFrom.nVar )
+	pTo.db.mutex.CriticalSection(func() {
+		for i := 0; i < pFrom.nVar; i++ {
+			sqlite3VdbeMemMove(&pTo.aVar[i], &pFrom.aVar[i])
+		}
+	})
+	return
 }
 
 /*
@@ -972,15 +942,15 @@ func int sqlite3_stmt_busy(sqlite3_stmt *pStmt){
 ** are no more.
 */
 func sqlite3_stmt *sqlite3_next_stmt(sqlite3 *pDb, sqlite3_stmt *pStmt){
-  sqlite3_stmt *Next;
-  pDb.mutex.Lock()
-  if( pStmt==0 ){
-    Next = (sqlite3_stmt*)pDb.pVdbe;
-  }else{
-    Next = (sqlite3_stmt*)((Vdbe*)pStmt).Next;
-  }
-  pDb.mutex.Unlock()
-  return Next;
+	sqlite3_stmt *Next;
+	pDb.mutex.CriticalSection(func() {
+		if pStmt == nil {
+			Next = (sqlite3_stmt*)(pDb.pVdbe)
+		} else {
+			Next = (sqlite3_stmt*)((Vdbe*)pStmt).Next;
+		}
+	})
+	return Next
 }
 
 /*
